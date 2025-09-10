@@ -4,3 +4,4 @@ yaql
 pydantic
 jinja2
 orquesta
+httpx

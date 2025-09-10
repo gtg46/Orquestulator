@@ -12,7 +12,6 @@ const monacoOptions = {
   lineHeight: 1.4,
   wordWrap: 'on',
   automaticLayout: true,
-  padding: { top: 12, bottom: 12 },
   scrollbar: {
     vertical: 'auto',
     horizontal: 'auto',
@@ -37,8 +36,8 @@ const monacoOptions = {
 
 function App() {
   const monaco = useMonaco()
-  const [data, setData] = useState('name: "John Doe"\nage: 30\nactive: true')
-  const [expression, setExpression] = useState('$.name')
+  const [data, setData] = useState('{}')
+  const [expression, setExpression] = useState('')
   const [queryType, setQueryType] = useState('orquesta')
   const [result, setResult] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -328,28 +327,26 @@ function App() {
 
     setSt2Loading(true)
     try {
-      // Clean up URL and build execution endpoint
-      const baseUrl = st2Url.replace(/\/$/, '')
-      const executionUrl = `${baseUrl}/v1/executions/${st2ExecutionId}`
+      // Use the backend proxy instead of direct StackStorm API calls
+      const backendUrl = 'http://localhost:8000/api/stackstorm/execution/' + st2ExecutionId
 
-      // Prepare headers
-      const headers = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
+      const requestBody = {
+        url: st2Url,
+        api_key: st2ApiKey || null
       }
 
-      if (st2ApiKey) {
-        headers['X-Auth-Token'] = st2ApiKey
-      }
-
-      const response = await fetch(executionUrl, {
-        method: 'GET',
-        headers: headers,
-        mode: 'cors'
+      const response = await fetch(backendUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(requestBody)
       })
 
       if (response.ok) {
-        const executionData = await response.json()
+        const responseData = await response.json()
+        const executionData = responseData.execution_data
 
         // Validate that we received execution data
         if (!executionData || !executionData.id) {
@@ -375,37 +372,34 @@ function App() {
           children: executionData.children || []
         }
 
-        // Set the execution data as formatted JSON
-        const formattedData = JSON.stringify(resultData, null, 2)
-        setData(formattedData)
-        setDataFormat('json')
-        setDetectedDataFormat('json')
-        setResult(`StackStorm execution data loaded successfully! Status: ${executionData.status}`)
+        // Set the execution data to the task result field instead of context field
+        // Format the data according to the current task result format
+        const formattedData = taskResultFormat === 'json'
+          ? JSON.stringify(resultData, null, 2)
+          : yaml.dump(resultData, { indent: 2 })
+        setTaskResult(formattedData)
+        setDetectedTaskResultFormat(taskResultFormat)
+        setResult(responseData.message)
         setResultType('success')
 
-      } else if (response.status === 401) {
-        setResult('Authentication failed: Invalid or missing API key')
-        setResultType('error')
-      } else if (response.status === 404) {
-        setResult(`Execution ${st2ExecutionId} not found. Check the execution ID.`)
-        setResultType('error')
-      } else if (response.status === 403) {
-        setResult('Access forbidden: Insufficient permissions for this execution')
-        setResultType('error')
       } else {
-        const errorText = await response.text()
-        setResult(`StackStorm API Error (${response.status}): ${errorText}`)
+        // Handle HTTP error responses from the backend
+        try {
+          const errorData = await response.json()
+          setResult(errorData.detail || `Backend Error (${response.status})`)
+        } catch {
+          const errorText = await response.text()
+          setResult(`Backend Error (${response.status}): ${errorText}`)
+        }
         setResultType('error')
       }
     } catch (error) {
       if (error.name === 'TypeError' && error.message.includes('fetch')) {
-        setResult(`Connection Error: Could not connect to StackStorm at ${st2Url}. 
-        • Check that the URL is correct
-        • Ensure StackStorm is running and accessible
-        • Verify CORS is properly configured
-        • Check if authentication is required`)
+        setResult(`Connection Error: Could not connect to backend at http://localhost:8000. 
+        • Check that the backend is running
+        • Ensure the backend is accessible on port 8000`)
       } else if (error.name === 'AbortError') {
-        setResult('Request timed out. The StackStorm server may be slow to respond.')
+        setResult('Request timed out. The backend server may be slow to respond.')
       } else {
         setResult(`Network Error: ${error.message}`)
       }
@@ -511,7 +505,7 @@ function App() {
               onChange={(value) => setExpression(value || '')}
               options={{
                 ...monacoOptions,
-                placeholder: "$.key or {{ name }}"
+                placeholder: "<% ctx() %>"
               }}
               onMount={(editor, monaco) => {
                 // Handle Ctrl+Enter shortcut

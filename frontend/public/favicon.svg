@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Uploaded to: SVG Repo, www.svgrepo.com, Generator: SVG Repo Mixer Tools -->
+
+<svg
+   fill="#000000"
+   width="800"
+   height="800"
+   viewBox="0 0 256 256"
+   id="Flat"
+   version="1.1"
+   sodipodi:docname="brackets-angle-bold-svgrepo-com.svg"
+   inkscape:export-filename="orquesta.svg"
+   inkscape:export-xdpi="3.8399999"
+   inkscape:export-ydpi="3.8399999"
+   inkscape:version="1.4.2 (f4327f4, 2025-05-13)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs1" />
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="1.28"
+     inkscape:cx="366.01563"
+     inkscape:cy="328.51563"
+     inkscape:window-width="1920"
+     inkscape:window-height="1017"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="Flat">
+    <inkscape:page
+       x="0"
+       y="0"
+       width="256"
+       height="256"
+       id="page2"
+       margin="0"
+       bleed="0" />
+  </sodipodi:namedview>
+  <path
+     d="M 78.187804,46.44238 26.287434,128 l 51.90037,81.55762 c 3.57093,5.59196 1.926251,13.02045 -3.671373,16.58248 -5.597624,3.56204 -13.023495,1.90556 -16.576627,-3.69772 l -56.0000003,-88 c -2.50146999,-3.93069 -2.50146999,-8.95407 0,-12.88476 l 56.0000003,-88 c 3.56291,-5.5794 10.97109,-7.219567 16.556143,-3.665534 5.585054,3.554034 7.237009,10.959594 3.691857,16.550294 z m 175.872396,75.11524 -56,-88 c -3.55314,-5.603284 -10.97901,-7.259756 -16.57663,-3.697723 -5.59762,3.562033 -7.2423,10.990525 -3.67137,16.582483 L 229.71257,128 177.8122,209.55762 c -3.57093,5.59196 -1.92625,13.02045 3.67137,16.58248 5.59762,3.56204 13.02349,1.90556 16.57663,-3.69772 l 56,-88 c 2.50147,-3.93069 2.50147,-8.95407 0,-12.88476 z"
+     id="path1"
+     sodipodi:nodetypes="cccsccccscccscccsccc"
+     inkscape:export-filename="path1.png"
+     inkscape:export-xdpi="96"
+     inkscape:export-ydpi="96"
+     style="fill:#ffffff" />
+  <circle
+     style="fill:#ffffff;stroke-width:0.32"
+     id="path2"
+     cy="50.259106"
+     cx="103.30431"
+     r="21.675053" />
+  <circle
+     style="fill:#ffffff;stroke-width:0.32"
+     id="path2-8"
+     cx="152.52133"
+     cy="204.83943"
+     r="22.38216" />
+  <path
+     style="fill:#ffffff;stroke-width:0.32"
+     d="m 83.792152,213.54625 c -2.26181,6.22792 -1.468249,13.86765 3.535537,16.26346 4.753668,2.27605 12.297954,-2.13379 14.142131,-7.07107 31.81654,-85.18012 38.32539,-96.07461 67.88226,-177.483805 1.66848,-4.595537 0.51312,-12.01533 -3.8891,-14.142136 -5.42022,-2.618631 -14.60683,1.396975 -16.617,7.071066 C 118.87935,122.77023 110.23629,140.73199 83.792152,213.54625 Z"
+     id="path4"
+     sodipodi:nodetypes="sassass" />
+</svg>
