@@ -1,28 +1,62 @@
 import { useState } from 'react'
 import * as yaml from 'js-yaml'
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import Editor from '@monaco-editor/react'
 import './App.css'
 
+// Monaco Editor configuration
+const monacoOptions = {
+  minimap: { enabled: false },
+  scrollBeyondLastLine: false,
+  fontSize: 13,
+  fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+  lineHeight: 1.4,
+  wordWrap: 'on',
+  automaticLayout: true,
+  scrollbar: {
+    vertical: 'auto',
+    horizontal: 'auto',
+    useShadows: false,
+    verticalScrollbarSize: 8,
+    horizontalScrollbarSize: 8
+  },
+  overviewRulerBorder: false,
+  hideCursorInOverviewRuler: true,
+  overviewRulerLanes: 0,
+  renderLineHighlight: 'line',
+  selectionHighlight: false,
+  occurrencesHighlight: false,
+  codeLens: false,
+  folding: false,
+  lineNumbers: 'off',
+  glyphMargin: false,
+  lineDecorationsWidth: 0,
+  lineNumbersMinChars: 0,
+  theme: 'vs-dark'
+}
+
 function App() {
-  const [data, setData] = useState('{"name": "John Doe", "age": 30, "active": true}')
+  const [data, setData] = useState('name: "John Doe"\nage: 30\nactive: true')
   const [expression, setExpression] = useState('$.name')
   const [queryType, setQueryType] = useState('orquesta')
   const [result, setResult] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [resultType, setResultType] = useState('') // 'success', 'error', or ''
   const [detectedType, setDetectedType] = useState('')
-  const [dataFormat, setDataFormat] = useState('json') // 'json' or 'yaml'
-  const [detectedDataFormat, setDetectedDataFormat] = useState('json')
+  const [dataFormat, setDataFormat] = useState('yaml') // 'json' or 'yaml'
+  const [detectedDataFormat, setDetectedDataFormat] = useState('yaml')
   const [st2Url, setSt2Url] = useState('http://localhost:9101')
   const [st2ApiKey, setSt2ApiKey] = useState('')
   const [st2ExecutionId, setSt2ExecutionId] = useState('')
   const [st2Loading, setSt2Loading] = useState(false)
-  const [st2Collapsed, setSt2Collapsed] = useState(true)
-  const [taskSucceeded, setTaskSucceeded] = useState(true) // For orquesta mode task status
+
+  // Orquesta-specific settings
+  const [taskStatus, setTaskStatus] = useState('succeeded') // 'succeeded' or 'failed'
+  const [taskResult, setTaskResult] = useState('')
+  const [taskResultFormat, setTaskResultFormat] = useState('yaml')
+  const [detectedTaskResultFormat, setDetectedTaskResultFormat] = useState('yaml')
 
   const detectDataFormat = (dataText) => {
-    if (!dataText.trim()) return 'json'
+    if (!dataText.trim()) return 'yaml'
 
     try {
       JSON.parse(dataText)
@@ -51,32 +85,48 @@ function App() {
     }
   }
 
-  const formatData = () => {
-    try {
-      // Use the validation function for consistent parsing
-      const parsedData = validateAndParseData(data)
-
-      if (dataFormat === 'json') {
-        setData(JSON.stringify(parsedData, null, 2))
-      } else {
-        setData(yaml.dump(parsedData, { indent: 2 }))
+  // Reusable helper functions for data management
+  const createDataHelpers = (
+    dataValue,
+    setDataValue,
+    formatState,
+    setFormatState,
+    setDetectedFormatState
+  ) => ({
+    handleChange: (newData) => {
+      setDataValue(newData)
+      const detected = detectDataFormat(newData)
+      setDetectedFormatState(detected)
+      if (!newData.trim() || formatState === detected) {
+        setFormatState(detected)
       }
-    } catch (error) {
-      // If formatting fails, leave data as is
-      console.error('Format error:', error)
+    },
+    clear: () => {
+      setDataValue('')
+      setFormatState('yaml')
+      setDetectedFormatState('yaml')
+    },
+    format: () => {
+      try {
+        const parsedData = validateAndParseData(dataValue)
+        if (formatState === 'json') {
+          setDataValue(JSON.stringify(parsedData, null, 2))
+        } else {
+          setDataValue(yaml.dump(parsedData, { indent: 2 }))
+        }
+      } catch (error) {
+        console.error('Format error:', error)
+      }
     }
-  }
+  })
 
-  const handleDataChange = (newData) => {
-    setData(newData)
-    const detected = detectDataFormat(newData)
-    setDetectedDataFormat(detected)
-    // Only auto-update format if user hasn't manually selected a different one
-    // or if the detected format matches what user selected
-    if (!newData.trim() || dataFormat === detected) {
-      setDataFormat(detected)
-    }
-  }
+  // Create helper instances
+  const dataHelpers = createDataHelpers(
+    data, setData, dataFormat, setDataFormat, setDetectedDataFormat
+  )
+  const taskResultHelpers = createDataHelpers(
+    taskResult, setTaskResult, taskResultFormat, setTaskResultFormat, setDetectedTaskResultFormat
+  )
 
   const handleDataFormatChange = (newFormat) => {
     if (newFormat === dataFormat) {
@@ -85,6 +135,7 @@ function App() {
 
     if (!data.trim()) {
       setDataFormat(newFormat)
+      setTaskResultFormat(newFormat)
       return
     }
 
@@ -93,41 +144,84 @@ function App() {
       // Use the validation function for better error handling
       const parsedData = validateAndParseData(data)
 
-      // Convert to the selected format
-      if (newFormat === 'json') {
-        setData(JSON.stringify(parsedData, null, 2))
-      } else {
-        setData(yaml.dump(parsedData, { indent: 2 }))
-      }
+      // Batch state updates to avoid multiple re-renders
+      const formattedData = newFormat === 'json'
+        ? JSON.stringify(parsedData, null, 2)
+        : yaml.dump(parsedData, { indent: 2 })
 
+      // Update data-related states in batch
+      setData(formattedData)
       setDataFormat(newFormat)
       setDetectedDataFormat(newFormat)
+      setTaskResultFormat(newFormat)
+      setDetectedTaskResultFormat(newFormat)
+
+      // Also convert task result if it exists
+      if (taskResult.trim()) {
+        try {
+          const parsedTaskResult = validateAndParseData(taskResult)
+          const formattedTaskResult = newFormat === 'json'
+            ? JSON.stringify(parsedTaskResult, null, 2)
+            : yaml.dump(parsedTaskResult, { indent: 2 })
+          setTaskResult(formattedTaskResult)
+        } catch (error) {
+          console.error('Task result conversion error:', error)
+        }
+      }
     } catch (error) {
       // If conversion fails, just change format without converting data
       console.error('Conversion error:', error)
       setDataFormat(newFormat)
+      setTaskResultFormat(newFormat)
     }
   }
 
   const copyToClipboard = async (text) => {
     try {
       await navigator.clipboard.writeText(text)
+      // Could add toast notification here for better UX
+      return { success: true }
     } catch (err) {
-      console.error('Failed to copy: ', err)
+      console.error('Failed to copy to clipboard:', err)
+      // Fallback for older browsers or when clipboard API is not available
+      try {
+        const textArea = document.createElement('textarea')
+        textArea.value = text
+        document.body.appendChild(textArea)
+        textArea.select()
+        document.execCommand('copy')
+        document.body.removeChild(textArea)
+        return { success: true }
+      } catch (fallbackErr) {
+        console.error('Fallback copy method also failed:', fallbackErr)
+        return { success: false, error: 'Could not copy to clipboard' }
+      }
     }
   }
 
-  const clearData = () => {
-    setData('')
-    setDataFormat('json')
-    setDetectedDataFormat('json')
-  }
-
-  const clearExpression = () => {
-    setExpression('')
-  }
+  // Wrapper functions using helpers
+  const clearData = () => dataHelpers.clear()
+  const clearExpression = () => setExpression('')
+  const handleDataChange = (newData) => dataHelpers.handleChange(newData)
+  const clearTaskResult = () => taskResultHelpers.clear()
+  const formatData = () => dataHelpers.format()
+  const formatTaskResult = () => taskResultHelpers.format()
+  const handleTaskResultChange = (newTaskResult) => taskResultHelpers.handleChange(newTaskResult)
 
   const evaluateExpression = async () => {
+    // Input validation
+    if (!expression.trim()) {
+      setResult('Error: Expression cannot be empty')
+      setResultType('error')
+      return
+    }
+
+    if (!data.trim() && queryType !== 'orquesta') {
+      setResult('Error: Data cannot be empty for evaluation')
+      setResultType('error')
+      return
+    }
+
     setIsLoading(true)
     setResultType('')
     try {
@@ -142,14 +236,27 @@ function App() {
         return
       }
 
+      let parsedTaskResult = {}
+      if (queryType === 'orquesta' && taskResult) {
+        try {
+          parsedTaskResult = validateAndParseData(taskResult)
+        } catch (e) {
+          setResult(`Task Result Parse Error: ${e.message}`)
+          setResultType('error')
+          setIsLoading(false)
+          return
+        }
+      }
+
       const payload = {
         expression,
         data: queryType === 'orquesta'
           ? {
             ...parsedData,
-            __task_status: taskSucceeded ? 'succeeded' : 'failed'
+            __task_status: taskStatus,
+            __task_result: parsedTaskResult
           }
-          : parsedData  // For yaql/jinja2, send data as-is
+          : parsedData  // Send data as-is for YAQL/Jinja2
       }
 
       const endpoint = `/api/evaluate/${queryType}`
@@ -165,7 +272,13 @@ function App() {
       if (response.ok) {
         const responseData = await response.json()
         setDetectedType(responseData.query_type)
-        setResult(JSON.stringify(responseData.result, null, 2))
+
+        // Format result according to current dataFormat
+        const formattedResult = dataFormat === 'json'
+          ? JSON.stringify(responseData.result, null, 2)
+          : yaml.dump(responseData.result, { indent: 2 })
+
+        setResult(formattedResult)
         setResultType('success')
       } else {
         const errorData = await response.json()
@@ -188,17 +301,18 @@ function App() {
     }
   }
 
-  const getDataFormatStatusText = () => {
-    return `format: ${detectedDataFormat.toUpperCase()}`
-  }
-
-  const getDataFormatStatusClass = () => {
-    return 'status-dot'
-  }
-
   const fetchStackStormData = async () => {
     if (!st2Url || !st2ExecutionId) {
-      setResult('StackStorm URL and Execution ID are required')
+      setResult('Error: StackStorm URL and Execution ID are required')
+      setResultType('error')
+      return
+    }
+
+    // Basic URL validation
+    try {
+      new URL(st2Url)
+    } catch {
+      setResult('Error: Invalid StackStorm URL format')
       setResultType('error')
       return
     }
@@ -228,6 +342,13 @@ function App() {
       if (response.ok) {
         const executionData = await response.json()
 
+        // Validate that we received execution data
+        if (!executionData || !executionData.id) {
+          setResult('Error: Invalid execution data received from StackStorm')
+          setResultType('error')
+          return
+        }
+
         // Extract the most useful data for expression testing
         const resultData = {
           execution_id: executionData.id,
@@ -250,14 +371,17 @@ function App() {
         setData(formattedData)
         setDataFormat('json')
         setDetectedDataFormat('json')
-        setResult('StackStorm execution data loaded successfully!')
+        setResult(`StackStorm execution data loaded successfully! Status: ${executionData.status}`)
         setResultType('success')
 
       } else if (response.status === 401) {
-        setResult('Authentication failed. Check your API key.')
+        setResult('Authentication failed: Invalid or missing API key')
         setResultType('error')
       } else if (response.status === 404) {
-        setResult(`Execution ${st2ExecutionId} not found.`)
+        setResult(`Execution ${st2ExecutionId} not found. Check the execution ID.`)
+        setResultType('error')
+      } else if (response.status === 403) {
+        setResult('Access forbidden: Insufficient permissions for this execution')
         setResultType('error')
       } else {
         const errorText = await response.text()
@@ -266,7 +390,13 @@ function App() {
       }
     } catch (error) {
       if (error.name === 'TypeError' && error.message.includes('fetch')) {
-        setResult(`Connection Error: Could not connect to StackStorm at ${st2Url}. Check the URL and ensure StackStorm is running and CORS is configured.`)
+        setResult(`Connection Error: Could not connect to StackStorm at ${st2Url}. 
+        • Check that the URL is correct
+        • Ensure StackStorm is running and accessible
+        • Verify CORS is properly configured
+        • Check if authentication is required`)
+      } else if (error.name === 'AbortError') {
+        setResult('Request timed out. The StackStorm server may be slow to respond.')
       } else {
         setResult(`Network Error: ${error.message}`)
       }
@@ -294,7 +424,9 @@ function App() {
     <div className="app">
       <header className="app-header">
         <h1>
-          <span className="header-icon">⚙️</span>
+          <span className="header-icon">
+            <img src="/favicon.svg" alt="Orquestulator" style={{ width: 28, height: 28, verticalAlign: 'middle' }} />
+          </span>
           Orquestulator
         </h1>
         <p>Expression evaluator for Orquesta, YAQL, and Jinja2</p>
@@ -303,86 +435,84 @@ function App() {
       <div className="panes-container">
         {/* Query Pane - Full Width at Top */}
         <div className="pane query-pane">
-          <div className="pane-header">
-            <h3>
+          <div className="pane-header flex items-center justify-between">
+            <h3 className="flex items-center gap-sm text-mono text-uppercase">
               <span className="pane-icon">Q</span>
               Query
             </h3>
-            <div className="query-controls">
-              <div className="query-type-buttons">
+            <div className="query-controls flex gap-sm items-center">
+              <div className="btn-group query-type-buttons">
                 <button
                   onClick={() => setQueryType('orquesta')}
-                  className={`query-type-btn ${queryType === 'orquesta' ? 'active' : ''}`}
+                  className={`btn btn--secondary ${queryType === 'orquesta' ? 'active' : ''}`}
                 >
                   ORQUESTA
                 </button>
                 <button
                   onClick={() => setQueryType('yaql')}
-                  className={`query-type-btn ${queryType === 'yaql' ? 'active' : ''}`}
+                  className={`btn btn--secondary ${queryType === 'yaql' ? 'active' : ''}`}
                 >
                   YAQL
                 </button>
                 <button
                   onClick={() => setQueryType('jinja2')}
-                  className={`query-type-btn ${queryType === 'jinja2' ? 'active' : ''}`}
+                  className={`btn btn--secondary ${queryType === 'jinja2' ? 'active' : ''}`}
                 >
                   JINJA2
                 </button>
               </div>
+              <div className="btn-group data-format-buttons">
+                <button
+                  className={`btn btn--secondary ${dataFormat === 'yaml' ? 'active' : ''}`}
+                  onClick={() => handleDataFormatChange('yaml')}
+                >
+                  YAML
+                </button>
+                <button
+                  className={`btn btn--secondary ${dataFormat === 'json' ? 'active' : ''}`}
+                  onClick={() => handleDataFormatChange('json')}
+                >
+                  JSON
+                </button>
+              </div>
               <div className="action-buttons">
                 <button
-                  className="clear-btn"
+                  className="btn btn--secondary"
                   onClick={clearExpression}
                   title="Clear expression"
                 >
                   clear
                 </button>
                 <button
-                  className="copy-btn"
+                  className="btn btn--secondary"
                   onClick={() => copyToClipboard(expression)}
                   title="Copy expression"
                   disabled={!expression}
                 >
                   copy
                 </button>
-                <button
-                  onClick={evaluateExpression}
-                  disabled={isLoading}
-                  className={`evaluate-btn ${isLoading ? 'loading' : ''}`}
-                >
-                  {isLoading ? '' : 'eval'}
-                </button>
               </div>
             </div>
           </div>
-          <div className="code-input-container">
-            <SyntaxHighlighter
-              language={queryType === 'yaql' ? 'javascript' : 'django'}
-              style={vscDarkPlus}
-              className="code-area-highlight"
-              customStyle={{
-                margin: 0,
-                padding: '12px',
-                fontSize: '14px',
-                fontFamily: 'Consolas, Monaco, monospace',
-                backgroundColor: 'transparent',
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                pointerEvents: 'none',
-                overflow: 'hidden'
-              }}
-            >
-              {expression || ' '}
-            </SyntaxHighlighter>
-            <textarea
-              className="code-area code-area-overlay"
+          <div className="monaco-editor-container query-editor">
+            <Editor
+              height="80px"
+              language={queryType === 'yaql' ? 'javascript' : 'plaintext'}
               value={expression}
-              onChange={(e) => setExpression(e.target.value)}
-              placeholder="$.key or {{ name }}"
-              onKeyDown={handleKeyPress}
+              onChange={(value) => setExpression(value || '')}
+              options={{
+                ...monacoOptions,
+                placeholder: "$.key or {{ name }}"
+              }}
+              onMount={(editor, monaco) => {
+                // Handle Ctrl+Enter shortcut
+                editor.onKeyDown((e) => {
+                  if ((e.ctrlKey || e.metaKey) && e.keyCode === monaco.KeyCode.Enter) {
+                    e.preventDefault()
+                    handleKeyPress({ key: 'Enter', ctrlKey: e.ctrlKey, metaKey: e.metaKey, preventDefault: () => { } })
+                  }
+                })
+              }}
             />
           </div>
           <div className="keyboard-hint">
@@ -398,43 +528,16 @@ function App() {
               {queryType === 'orquesta' ? 'Context' : 'Data'}
             </h3>
             <div className="data-header">
-              {queryType === 'orquesta' && (
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={taskSucceeded}
-                    onChange={(e) => setTaskSucceeded(e.target.checked)}
-                    className="checkbox-input"
-                  />
-                  <span className={`checkbox-text ${taskSucceeded ? 'succeeded' : 'failed'}`}>
-                    {taskSucceeded ? 'succeeded' : 'failed'}
-                  </span>
-                </label>
-              )}
-              <div className="data-format-buttons">
-                <button
-                  className={`data-format-btn ${dataFormat === 'json' ? 'active' : ''}`}
-                  onClick={() => handleDataFormatChange('json')}
-                >
-                  JSON
-                </button>
-                <button
-                  className={`data-format-btn ${dataFormat === 'yaml' ? 'active' : ''}`}
-                  onClick={() => handleDataFormatChange('yaml')}
-                >
-                  YAML
-                </button>
-              </div>
               <div className="data-actions">
                 <button
-                  className="clear-btn"
+                  className="btn btn--secondary"
                   onClick={clearData}
                   title={queryType === 'orquesta' ? "Clear context" : "Clear data"}
                 >
                   clear
                 </button>
                 <button
-                  className="copy-btn"
+                  className="btn btn--secondary"
                   onClick={() => copyToClipboard(data)}
                   title={queryType === 'orquesta' ? "Copy context" : "Copy data"}
                   disabled={!data}
@@ -451,202 +554,193 @@ function App() {
               </div>
             </div>
           </div>
-          <div className="code-input-container">
-            <SyntaxHighlighter
+          <div className="monaco-editor-container data-editor">
+            <Editor
+              height="300px"
               language={dataFormat === 'json' ? 'json' : 'yaml'}
-              style={vscDarkPlus}
-              className="code-highlighter"
-              customStyle={{
-                margin: 0,
-                background: 'transparent',
-                padding: '12px',
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                pointerEvents: 'none',
-                overflow: 'hidden'
-              }}
-            >
-              {data || ' '}
-            </SyntaxHighlighter>
-            <textarea
-              className="code-area code-area-overlay"
               value={data}
-              onChange={(e) => handleDataChange(e.target.value)}
-              placeholder={
-                queryType === 'orquesta'
-                  ? (dataFormat === 'json'
-                    ? '{"user_var": "value", "__task_status": "succeeded", "__task_result": {"output": "success"}}'
-                    : 'user_var: value\n__task_status: succeeded\n__task_result:\n  output: success')
-                  : (dataFormat === 'json'
-                    ? '{"key": "value", "items": [1, 2, 3]}'
-                    : 'name: John Doe\nage: 30\nactive: true')
-              }
-              onKeyDown={handleKeyPress}
+              onChange={(value) => handleDataChange({ target: { value: value || '' } })}
+              options={monacoOptions}
+              onMount={(editor, monaco) => {
+                // Handle Ctrl+Enter shortcut
+                editor.onKeyDown((e) => {
+                  if ((e.ctrlKey || e.metaKey) && e.keyCode === monaco.KeyCode.Enter) {
+                    e.preventDefault()
+                    handleKeyPress({ key: 'Enter', ctrlKey: e.ctrlKey, metaKey: e.metaKey, preventDefault: () => { } })
+                  }
+                })
+              }}
             />
-          </div>
-          {queryType === 'orquesta' ? (
-            // Orquesta mode: Split Context and Result panes
-            <div className="pane orquesta-split-pane">
-            // Context Pane
-              <div className="split-section">
-                <div className="pane-header">
-                  <h3>
-                    <span className="pane-icon">C</span>
-                    Context
-                  </h3>
-                  <div className="data-header">
-                    <label className="checkbox-label">
-                      <input
-                        type="checkbox"
-                        checked={taskSucceeded}
-                        onChange={(e) => setTaskSucceeded(e.target.checked)}
-                        className="checkbox-input"
-                      />
-                      <span className={`checkbox-text ${taskSucceeded ? 'succeeded' : 'failed'}`}>
-                        {taskSucceeded ? 'succeeded' : 'failed'}
-                      </span>
-                    </label>
-                    <div className="data-format-buttons">
-                      <button
-                        className={`data-format-btn ${dataFormat === 'json' ? 'active' : ''}`}
-                        onClick={() => handleDataFormatChange('json')}
-                      >
-                        JSON
-                      </button>
-                      <button
-                        className={`data-format-btn ${dataFormat === 'yaml' ? 'active' : ''}`}
-                        onClick={() => handleDataFormatChange('yaml')}
-                      >
-                        YAML
-                      </button>
-                    </div>
-                    <div className="data-actions">
-                      <button
-                        className="clear-btn"
-                        onClick={clearData}
-                        title="Clear context"
-                      >
-                        clear
-                      </button>
-                      <button
-                        className="copy-btn"
-                        onClick={() => copyToClipboard(data)}
-                        title="Copy context"
-                        disabled={!data}
-                      >
-                        copy
-                      </button>
-                      <button
-                        className="format-btn"
-                        onClick={formatData}
-                        title={`Format ${detectedDataFormat.toUpperCase()}`}
-                      >
-                        format
-                      </button>
-                    </div>
-                  </div>
-                </div>
-                <div className="code-input-container">
-                  <SyntaxHighlighter
-                    language={dataFormat === 'json' ? 'json' : 'yaml'}
-                    style={vscDarkPlus}
-                    className="code-highlighter"
-                    customStyle={{
-                      margin: 0,
-                      background: 'transparent',
-                      padding: '12px',
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      pointerEvents: 'none',
-                      overflow: 'hidden'
-                    }}
-                  >
-                    {data || ' '}
-                  </SyntaxHighlighter>
-                  <textarea
-                    className="code-area code-area-overlay"
-                    value={data}
-                    onChange={(e) => handleDataChange(e.target.value)}
-                    placeholder={dataFormat === 'json' ? '{"user_var": "value"}' : 'user_var: value'}
-                    onKeyDown={handleKeyPress}
-                  />
-                </div>
-              </div>
-            </div>
-        {/* Result Pane - Right Side */}
-          <div className="pane">
-            <div className="pane-header">
-              <h3>
-                <span className="pane-icon">R</span>
-                Result
-              </h3>
-              <div className="result-header">
-                <div className="status-indicator">
-                  <span className={getStatusDotClass()}></span>
-                  {getStatusText()}
-                </div>
-                {result && (
-                  <button
-                    className="copy-btn"
-                    onClick={() => copyToClipboard(result)}
-                  >
-                    copy
-                  </button>
-                )}
-              </div>
-            </div>
-            {result ? (
-              <SyntaxHighlighter
-                language="json"
-                style={vscDarkPlus}
-                className={`result-display ${resultType ? `result-${resultType}` : ''}`}
-                customStyle={{
-                  margin: '0 0 8px 0',
-                  background: 'var(--bg-tertiary)',
-                  border: '1px solid var(--border-primary)',
-                  borderRadius: '4px'
-                }}
-              >
-                {result}
-              </SyntaxHighlighter>
-            ) : (
-              <pre className="result-display result-placeholder">
-              // awaiting evaluation...
-              </pre>
-            )}
           </div>
         </div>
 
-        {/* StackStorm Section - Bottom */}
-        <div className="stackstorm-section">
-          <div className="stackstorm-header">
-            <h3
-              className="stackstorm-title"
-              onClick={() => setSt2Collapsed(!st2Collapsed)}
-            >
-              <span className="pane-icon">S</span>
-              StackStorm Integration
-              <span className={`collapse-arrow ${st2Collapsed ? 'collapsed' : 'expanded'}`}>▼</span>
+        {/* Result Pane - Right Side */}
+        <div className="pane">
+          <div className="pane-header">
+            <h3>
+              <span className="pane-icon">E</span>
+              Evaluation
             </h3>
-            {!st2Collapsed && (
-              <button
-                className="fetch-btn"
-                onClick={fetchStackStormData}
-                disabled={st2Loading}
-              >
-                {st2Loading ? 'fetching...' : 'fetch execution data'}
-              </button>
-            )}
+            <div className="data-header">
+              <div className="status-indicator">
+                <span className={`status-dot ${resultType === 'success' ? 'success' : resultType === 'error' ? 'error' : isLoading ? 'loading' : ''}`}></span>
+              </div>
+              <div className="data-actions">
+                <button
+                  className="btn btn--secondary"
+                  onClick={() => copyToClipboard(result)}
+                  title="Copy result"
+                  disabled={!result}
+                >
+                  copy
+                </button>
+                <button
+                  className="btn btn--secondary"
+                  onClick={() => {
+                    if (result) {
+                      try {
+                        const parsedResult = validateAndParseData(result)
+                        const formattedResult = dataFormat === 'json'
+                          ? JSON.stringify(parsedResult, null, 2)
+                          : yaml.dump(parsedResult, { indent: 2 })
+                        setResult(formattedResult)
+                      } catch (error) {
+                        console.error('Result format error:', error)
+                      }
+                    }
+                  }}
+                  title={`Format ${dataFormat.toUpperCase()}`}
+                  disabled={!result}
+                >
+                  format
+                </button>
+                <button
+                  onClick={evaluateExpression}
+                  disabled={isLoading}
+                  className={`btn btn--primary ${isLoading ? 'loading' : ''}`}
+                >
+                  {isLoading ? '' : 'evaluate'}
+                </button>
+              </div>
+            </div>
           </div>
-          {!st2Collapsed && (
-            <>
+          {result ? (
+            <Editor
+              height="300px"
+              language={dataFormat === 'json' ? 'json' : 'yaml'}
+              value={result}
+              options={{
+                ...monacoOptions,
+                readOnly: true
+              }}
+            />
+          ) : (
+            <Editor
+              height="300px"
+              language="javascript"
+              value="// awaiting evaluation..."
+              options={{
+                ...monacoOptions,
+                readOnly: true
+              }}
+            />
+          )}
+        </div>
+
+        {/* Orquesta-specific panels - Only shown for Orquesta mode */}
+        {queryType === 'orquesta' && (
+          <>
+            {/* Task Result Panel */}
+            <div className="pane pane-bottom">
+              <div className="pane-header">
+                <h3>
+                  <span className="pane-icon">R</span>
+                  Result
+                </h3>
+                <div className="data-header">
+                  <div className="data-actions">
+                    <button
+                      className="btn btn--secondary"
+                      onClick={clearTaskResult}
+                      title="Clear task result"
+                    >
+                      clear
+                    </button>
+                    <button
+                      className="btn btn--secondary"
+                      onClick={() => copyToClipboard(taskResult)}
+                      title="Copy task result"
+                      disabled={!taskResult}
+                    >
+                      copy
+                    </button>
+                    <button
+                      className="btn btn--secondary"
+                      onClick={formatTaskResult}
+                      title={`Format ${detectedTaskResultFormat.toUpperCase()}`}
+                    >
+                      format
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div className="monaco-editor-container task-result-editor">
+                <Editor
+                  height="200px"
+                  language={taskResultFormat === 'json' ? 'json' : 'yaml'}
+                  value={taskResult}
+                  onChange={(value) => handleTaskResultChange({ target: { value: value || '' } })}
+                  options={monacoOptions}
+                  onMount={(editor, monaco) => {
+                    // Handle Ctrl+Enter shortcut
+                    editor.onKeyDown((e) => {
+                      if ((e.ctrlKey || e.metaKey) && e.keyCode === monaco.KeyCode.Enter) {
+                        e.preventDefault()
+                        handleKeyPress({ key: 'Enter', ctrlKey: e.ctrlKey, metaKey: e.metaKey, preventDefault: () => { } })
+                      }
+                    })
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* StackStorm Integration Panel */}
+            <div className="pane pane-bottom">
+              <div className="pane-header">
+                <h3>
+                  <span className="pane-icon">S</span>
+                  StackStorm
+                </h3>
+                <div className="data-header">
+                  <div className="data-actions">
+                    <button
+                      className="btn btn--primary"
+                      onClick={fetchStackStormData}
+                      disabled={st2Loading}
+                    >
+                      fetch result
+                    </button>
+                  </div>
+                </div>
+              </div>
               <div className="stackstorm-controls">
+                <div className="control-group control-group-inline">
+                  <label>Task Status Override:</label>
+                  <label className="toggle-label">
+                    <span className={`toggle-text fixed-width ${taskStatus === 'succeeded' ? 'succeeded' : 'failed'}`}>
+                      {taskStatus === 'succeeded' ? 'succeeded' : 'failed    '}
+                    </span>
+                    <div className="toggle-switch">
+                      <input
+                        type="checkbox"
+                        checked={taskStatus === 'succeeded'}
+                        onChange={(e) => setTaskStatus(e.target.checked ? 'succeeded' : 'failed')}
+                        className="toggle-input"
+                      />
+                      <span className="toggle-slider"></span>
+                    </div>
+                  </label>
+                </div>
                 <div className="control-group">
                   <label>StackStorm URL:</label>
                   <input
@@ -678,14 +772,18 @@ function App() {
                   />
                 </div>
               </div>
-              <div className="stackstorm-note">
-                <p><strong>Note:</strong> StackStorm must be configured with CORS headers to allow browser connections. Add <code>allowed_origins = ["http://localhost:5173"]</code> to your StackStorm configuration.</p>
-              </div>
-            </>
-          )}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="footer">
+        <div className="keyboard-hint">
+          Inspired by orquestaevaluator by Daren Lord
         </div>
       </div>
-    </div>
+    </div >
   )
 }
 
