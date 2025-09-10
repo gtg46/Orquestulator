@@ -1,6 +1,0 @@
-fastapi
-uvicorn[standard]
-yaql
-pydantic
-jinja2
-
