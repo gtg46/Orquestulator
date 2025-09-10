@@ -6,7 +6,9 @@ A modern web-based expression evaluation tool designed for testing and debugging
 
 Orquestulator provides a user-friendly interface for developers and automation engineers to test expressions and templates used in workflow automation, particularly with StackStorm and Orquesta workflows. The application supports multiple expression languages.
 
-```
+## 🖼️ Screenshot
+
+![Orquestulator UI](screenshots/orquestulator.png)
 
 ## 🚀 Quick Start
 
@@ -110,7 +112,6 @@ npm run dev
 2. **Set Execution ID**: Provide the StackStorm execution ID to fetch
 3. **Fetch Results**: Click "fetch result" to retrieve execution data
 4. **Use in Expressions**: The fetched data populates the task result field
-
 
 ## ✨ Features
 
