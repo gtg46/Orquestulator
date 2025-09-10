@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import * as yaml from 'js-yaml'
-import Editor from '@monaco-editor/react'
+import Editor, { useMonaco } from '@monaco-editor/react'
 import './App.css'
 
 // Monaco Editor configuration
@@ -12,6 +12,7 @@ const monacoOptions = {
   lineHeight: 1.4,
   wordWrap: 'on',
   automaticLayout: true,
+  padding: { top: 12, bottom: 12 },
   scrollbar: {
     vertical: 'auto',
     horizontal: 'auto',
@@ -35,6 +36,7 @@ const monacoOptions = {
 }
 
 function App() {
+  const monaco = useMonaco()
   const [data, setData] = useState('name: "John Doe"\nage: 30\nactive: true')
   const [expression, setExpression] = useState('$.name')
   const [queryType, setQueryType] = useState('orquesta')
@@ -54,6 +56,13 @@ function App() {
   const [taskResult, setTaskResult] = useState('')
   const [taskResultFormat, setTaskResultFormat] = useState('yaml')
   const [detectedTaskResultFormat, setDetectedTaskResultFormat] = useState('yaml')
+
+  // Initialize Monaco theme when Monaco becomes available
+  useEffect(() => {
+    if (monaco) {
+      monaco.editor.setTheme('vs-dark')
+    }
+  }, [monaco])
 
   const detectDataFormat = (dataText) => {
     if (!dataText.trim()) return 'yaml'
@@ -559,7 +568,7 @@ function App() {
               height="300px"
               language={dataFormat === 'json' ? 'json' : 'yaml'}
               value={data}
-              onChange={(value) => handleDataChange({ target: { value: value || '' } })}
+              onChange={(value) => handleDataChange(value || '')}
               options={monacoOptions}
               onMount={(editor, monaco) => {
                 // Handle Ctrl+Enter shortcut
@@ -689,7 +698,7 @@ function App() {
                   height="200px"
                   language={taskResultFormat === 'json' ? 'json' : 'yaml'}
                   value={taskResult}
-                  onChange={(value) => handleTaskResultChange({ target: { value: value || '' } })}
+                  onChange={(value) => handleTaskResultChange(value || '')}
                   options={monacoOptions}
                   onMount={(editor, monaco) => {
                     // Handle Ctrl+Enter shortcut
