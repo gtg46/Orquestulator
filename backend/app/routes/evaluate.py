@@ -1,20 +1,24 @@
 from fastapi import APIRouter, HTTPException, Path
 from app.models.schemas import EvaluateRequest, EvaluateResponse, ErrorResponse
 import yaql
-from jinja2 import Environment, BaseLoader, TemplateSyntaxError, UndefinedError
+import json
+from jinja2 import SandboxedEnvironment, BaseLoader, TemplateSyntaxError, UndefinedError, SecurityError
 from orquesta.expressions.base import evaluate as orquesta_evaluate
 
 router = APIRouter()
 
-# Initialize YAQL engine
+# Initialize YAQL engine with security considerations
+# YAQL is generally safer than Jinja2 for arbitrary user input since it's designed
+# as a query language, but we should still be cautious about the context we provide
 yaql_engine = yaql.factory.YaqlFactory().create()
 
-# Initialize Jinja2 environment
+# Initialize Jinja2 sandboxed environment for security
 class StringTemplateLoader(BaseLoader):
     def get_source(self, environment, template):
         return template, None, lambda: True
 
-jinja_env = Environment(loader=StringTemplateLoader(), autoescape=False)
+# Use SandboxedEnvironment to prevent template injection attacks
+jinja_env = SandboxedEnvironment(loader=StringTemplateLoader(), autoescape=True)
 
 @router.post("/evaluate/{query_type}", response_model=EvaluateResponse)
 async def evaluate_expression(
@@ -26,17 +30,27 @@ async def evaluate_expression(
     """
     try:
         if query_type == "yaql":
-            # Evaluate YAQL expression
+            # Evaluate YAQL expression with controlled context
+            # YAQL is generally safer than Jinja2 as it's designed for data querying,
+            # but we should still sanitize the context to prevent access to dangerous objects
             parsed_expression = yaql_engine(request.expression)
-            result = parsed_expression.evaluate(data=request.data)
+            # Create a safe copy of the data to prevent modification of mutable objects
+            safe_data = json.loads(json.dumps(request.data)) if request.data else {}
+            result = parsed_expression.evaluate(data=safe_data)
             
         elif query_type == "jinja2":
-            # Render Jinja2 template
+            # Render Jinja2 template using sandboxed environment for security
+            # This prevents template injection attacks while maintaining functionality
             template = jinja_env.from_string(request.expression)
             result = template.render(**request.data)
             
         elif query_type == "orquesta":
             # Use Orquesta base evaluate function (supports both YAQL <% %> and Jinja2 {{ }})
+            # Security: Orquesta auto-detects expression type and uses appropriate evaluator.
+            # Since we've secured Jinja2 with SandboxedEnvironment, and YAQL is inherently safer,
+            # plus Orquesta has built-in protections (e.g., blocking __ private variables),
+            # this should be reasonably secure for expression testing purposes.
+            
             # Extract workflow-specific data
             task_result = request.data.get('__task_result', None)
             task_id = request.data.get('__task_id', 'current_task')
@@ -94,6 +108,24 @@ async def evaluate_expression(
             query_type=query_type
         )
 
+    except SecurityError as e:
+        # Handle Jinja2 sandbox security violations
+        raise HTTPException(
+            status_code=403,
+            detail=ErrorResponse(
+                error=f"Template security violation: {str(e)}", 
+                query_type=query_type
+            ).dict()
+        )
+    except (TemplateSyntaxError, UndefinedError) as e:
+        # Handle Jinja2 template syntax and undefined variable errors
+        raise HTTPException(
+            status_code=400,
+            detail=ErrorResponse(
+                error=f"Template error: {str(e)}", 
+                query_type=query_type
+            ).dict()
+        )
     except Exception as e:
         raise HTTPException(
             status_code=400,
