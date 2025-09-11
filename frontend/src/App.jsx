@@ -36,25 +36,23 @@ const monacoOptions = {
 
 function App() {
   const monaco = useMonaco()
-  const [data, setData] = useState('{}')
-  const [expression, setExpression] = useState('')
-  const [queryType, setQueryType] = useState('orquesta')
-  const [result, setResult] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const [resultType, setResultType] = useState('') // 'success', 'error', or ''
-  const [detectedType, setDetectedType] = useState('')
   const [dataFormat, setDataFormat] = useState('yaml') // 'json' or 'yaml'
-  const [detectedDataFormat, setDetectedDataFormat] = useState('yaml')
+  const [queryType, setQueryType] = useState('orquesta')
+  const [query, setQuery] = useState('')
+  const [contextData, setContextData] = useState('')
+  const [evaluation, setEvaluation] = useState('')
+  const [evaluationStatus, setEvaluationStatus] = useState('') // 'success', 'error', 'loading' or ''
+  const [isLoading, setIsLoading] = useState(false)
+
+  // Orquesta-specific settings
+  const [taskStatusOverride, setTaskStatus] = useState('succeeded') // 'succeeded' or 'failed'
+  const [resultData, setResultData] = useState('')
+
+  // StackStorm-specific states
   const [st2Url, setSt2Url] = useState('http://localhost:9101')
   const [st2ApiKey, setSt2ApiKey] = useState('')
   const [st2ExecutionId, setSt2ExecutionId] = useState('')
   const [st2Loading, setSt2Loading] = useState(false)
-
-  // Orquesta-specific settings
-  const [taskStatus, setTaskStatus] = useState('succeeded') // 'succeeded' or 'failed'
-  const [taskResult, setTaskResult] = useState('')
-  const [taskResultFormat, setTaskResultFormat] = useState('yaml')
-  const [detectedTaskResultFormat, setDetectedTaskResultFormat] = useState('yaml')
 
   // Initialize Monaco theme when Monaco becomes available
   useEffect(() => {
@@ -63,21 +61,9 @@ function App() {
     }
   }, [monaco])
 
-  const detectDataFormat = (dataText) => {
-    if (!dataText.trim()) return 'yaml'
-
-    try {
-      JSON.parse(dataText)
-      return 'json'
-    } catch {
-      // If it's not valid JSON, assume it's YAML
-      return 'yaml'
-    }
-  }
-
   const validateAndParseData = (dataText) => {
     if (!dataText.trim()) {
-      throw new Error('Input cannot be empty')
+      throw new Error('Cannot parse empty data')
     }
 
     try {
@@ -93,95 +79,49 @@ function App() {
     }
   }
 
-  // Reusable helper functions for data management
-  const createDataHelpers = (
-    dataValue,
-    setDataValue,
-    formatState,
-    setFormatState,
-    setDetectedFormatState
-  ) => ({
-    handleChange: (newData) => {
-      setDataValue(newData)
-      const detected = detectDataFormat(newData)
-      setDetectedFormatState(detected)
-      if (!newData.trim() || formatState === detected) {
-        setFormatState(detected)
-      }
-    },
-    clear: () => {
-      setDataValue('')
-      setFormatState('yaml')
-      setDetectedFormatState('yaml')
-    },
-    format: () => {
-      try {
-        const parsedData = validateAndParseData(dataValue)
-        if (formatState === 'json') {
-          setDataValue(JSON.stringify(parsedData, null, 2))
-        } else {
-          setDataValue(yaml.dump(parsedData, { indent: 2 }))
-        }
-      } catch (error) {
-        console.error('Format error:', error)
-      }
-    }
-  })
+  const formatData = (data, format) => {
+    return format === 'json'
+      ? JSON.stringify(data, null, 2)
+      : yaml.dump(data, { indent: 2 })
+  }
 
-  // Create helper instances
-  const dataHelpers = createDataHelpers(
-    data, setData, dataFormat, setDataFormat, setDetectedDataFormat
-  )
-  const taskResultHelpers = createDataHelpers(
-    taskResult, setTaskResult, taskResultFormat, setTaskResultFormat, setDetectedTaskResultFormat
-  )
-
-  const handleDataFormatChange = (newFormat) => {
+  const handleDataFormatting = (newFormat) => {
     if (newFormat === dataFormat) {
       return
     }
 
-    if (!data.trim()) {
-      setDataFormat(newFormat)
-      setTaskResultFormat(newFormat)
-      return
-    }
 
-    try {
-      // Parse the data as YAML (works for both JSON and YAML input)
-      // Use the validation function for better error handling
-      const parsedData = validateAndParseData(data)
+    if (contextData.trim()) {
+      try {
+        // Parse the data as YAML (works for both JSON and YAML input)
+        // Use the validation function for better error handling
+        const parsedData = validateAndParseData(contextData)
 
-      // Batch state updates to avoid multiple re-renders
-      const formattedData = newFormat === 'json'
-        ? JSON.stringify(parsedData, null, 2)
-        : yaml.dump(parsedData, { indent: 2 })
+        // Batch state updates to avoid multiple re-renders
+        const formattedData = formatData(parsedData, newFormat)
 
-      // Update data-related states in batch
-      setData(formattedData)
-      setDataFormat(newFormat)
-      setDetectedDataFormat(newFormat)
-      setTaskResultFormat(newFormat)
-      setDetectedTaskResultFormat(newFormat)
-
-      // Also convert task result if it exists
-      if (taskResult.trim()) {
-        try {
-          const parsedTaskResult = validateAndParseData(taskResult)
-          const formattedTaskResult = newFormat === 'json'
-            ? JSON.stringify(parsedTaskResult, null, 2)
-            : yaml.dump(parsedTaskResult, { indent: 2 })
-          setTaskResult(formattedTaskResult)
-        } catch (error) {
-          console.error('Task result conversion error:', error)
-        }
+        setContextData(formattedData)
+      } catch (error) {
+        // TODO: Show error in evaluation
+        console.error('Data conversion error:', error)
       }
-    } catch (error) {
-      // If conversion fails, just change format without converting data
-      console.error('Conversion error:', error)
-      setDataFormat(newFormat)
-      setTaskResultFormat(newFormat)
     }
+
+    // Also convert task result if it exists
+    if (resultData.trim()) {
+      try {
+        const parsedData = validateAndParseData(resultData)
+
+        const formattedData = formatData(parsedData, newFormat)
+
+        setResultData(formattedData)
+      } catch (error) {
+        // TODO: Show error in evaluation
+        console.error('Result conversion error:', error)
+      }
+    }
+
+    setDataFormat(newFormat)
   }
 
   const copyToClipboard = async (text) => {
@@ -191,113 +131,84 @@ function App() {
       return { success: true }
     } catch (err) {
       console.error('Failed to copy to clipboard:', err)
-      // Fallback for older browsers or when clipboard API is not available
-      try {
-        const textArea = document.createElement('textarea')
-        textArea.value = text
-        document.body.appendChild(textArea)
-        textArea.select()
-        document.execCommand('copy')
-        document.body.removeChild(textArea)
-        return { success: true }
-      } catch (fallbackErr) {
-        console.error('Fallback copy method also failed:', fallbackErr)
-        return { success: false, error: 'Could not copy to clipboard' }
-      }
+      return { success: false, error: err }
     }
   }
 
-  // Wrapper functions using helpers
-  const clearData = () => dataHelpers.clear()
-  const clearExpression = () => setExpression('')
-  const handleDataChange = (newData) => dataHelpers.handleChange(newData)
-  const clearTaskResult = () => taskResultHelpers.clear()
-  const formatData = () => dataHelpers.format()
-  const formatTaskResult = () => taskResultHelpers.format()
-  const handleTaskResultChange = (newTaskResult) => taskResultHelpers.handleChange(newTaskResult)
-
   const evaluateExpression = async () => {
     // Input validation
-    if (!expression.trim()) {
-      setResult('Error: Expression cannot be empty')
-      setResultType('error')
+    if (!query.trim()) {
+      setEvaluation('Error: Query cannot be empty')
+      setEvaluationStatus('error')
       return
     }
 
-    if (!data.trim() && queryType !== 'orquesta') {
-      setResult('Error: Data cannot be empty for evaluation')
-      setResultType('error')
-      return
-    }
-
-    setIsLoading(true)
-    setResultType('')
-    try {
-      let parsedData
+    let parsedContextData = {}
+    if (resultData) {
       try {
-        // Use the validation function for better error handling
-        parsedData = validateAndParseData(data)
+        parsedContextData = validateAndParseData(contextData)
       } catch (e) {
-        setResult(`${queryType === 'orquesta' ? 'Context' : 'Data'} Parse Error: ${e.message}`)
-        setResultType('error')
-        setIsLoading(false)
+        setEvaluation(`${queryType === 'orquesta' ? 'Context' : 'Data'} Parse Error: ${e.message}`)
+        setEvaluationStatus('error')
         return
       }
+    }
 
-      let parsedTaskResult = {}
-      if (queryType === 'orquesta' && taskResult) {
-        try {
-          parsedTaskResult = validateAndParseData(taskResult)
-        } catch (e) {
-          setResult(`Task Result Parse Error: ${e.message}`)
-          setResultType('error')
-          setIsLoading(false)
-          return
+    let parsedResultData = {}
+    if (queryType === 'orquesta' && resultData) {
+      try {
+        parsedResultData = validateAndParseData(resultData)
+      } catch (e) {
+        setEvaluation(`Task Result Parse Error: ${e.message}`)
+        setEvaluationStatus('error')
+        return
+      }
+    }
+
+    const payload = {
+      expression: query,
+      data: queryType === 'orquesta'
+        ? {
+          ...parsedContextData,
+          __task_status: taskStatusOverride,
+          __task_result: parsedResultData
         }
-      }
+        : parsedContextData  // Send data as-is for YAQL/Jinja2
+    }
 
-      const payload = {
-        expression,
-        data: queryType === 'orquesta'
-          ? {
-            ...parsedData,
-            __task_status: taskStatus,
-            __task_result: parsedTaskResult
-          }
-          : parsedData  // Send data as-is for YAQL/Jinja2
-      }
+    const endpoint = `/api/evaluate/${queryType}`
 
-      const endpoint = `/api/evaluate/${queryType}`
+    setIsLoading(true)
+    setEvaluationStatus('')
 
+    try {
       const response = await fetch(`${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json'
         },
         body: JSON.stringify(payload)
       })
 
       if (response.ok) {
         const responseData = await response.json()
-        setDetectedType(responseData.query_type)
 
         // Format result according to current dataFormat
-        const formattedResult = dataFormat === 'json'
-          ? JSON.stringify(responseData.result, null, 2)
-          : yaml.dump(responseData.result, { indent: 2 })
+        // TODO: This might fail if the result is a primitive (string, number, boolean)
+        const formattedResult = formatData(responseData.result, dataFormat)
 
-        setResult(formattedResult)
-        setResultType('success')
+        setEvaluation(formattedResult)
+        setEvaluationStatus('success')
       } else {
         const errorData = await response.json()
         const errorMessage = errorData.detail?.error || errorData.detail || 'Unknown error'
-        setResult(`Error: ${errorMessage}`)
-        setResultType('error')
-        setDetectedType(errorData.detail?.query_type || '')
+        setEvaluation(`Error: ${errorMessage}`)
+        setEvaluationStatus('error')
       }
     } catch (error) {
-      setResult(`Network Error: ${error.message}`)
-      setResultType('error')
+      setEvaluation(`Network Error: ${error.message}`)
+      setEvaluationStatus('error')
     }
     setIsLoading(false)
   }
@@ -309,10 +220,10 @@ function App() {
     }
   }
 
-  const fetchStackStormData = async () => {
-    if (!st2Url || !st2ExecutionId) {
-      setResult('Error: StackStorm URL and Execution ID are required')
-      setResultType('error')
+  const fetchStackStormResult = async () => {
+    if (!st2Url || !st2ExecutionId || !st2ApiKey) {
+      setEvaluation('Error: StackStorm URL, Execution ID, and API Key are required')
+      setEvaluationStatus('error')
       return
     }
 
@@ -320,21 +231,21 @@ function App() {
     try {
       new URL(st2Url)
     } catch {
-      setResult('Error: Invalid StackStorm URL format')
-      setResultType('error')
+      setEvaluation('Error: Invalid StackStorm URL format')
+      setEvaluationStatus('error')
       return
+    }
+
+    // Use the backend proxy instead of direct StackStorm API calls
+    const backendUrl = '/api/stackstorm/execution/' + st2ExecutionId
+
+    const requestBody = {
+      url: st2Url,
+      api_key: st2ApiKey || null
     }
 
     setSt2Loading(true)
     try {
-      // Use the backend proxy instead of direct StackStorm API calls
-      const backendUrl = 'http://localhost:8000/api/stackstorm/execution/' + st2ExecutionId
-
-      const requestBody = {
-        url: st2Url,
-        api_key: st2ApiKey || null
-      }
-
       const response = await fetch(backendUrl, {
         method: 'POST',
         headers: {
@@ -350,77 +261,43 @@ function App() {
 
         // Validate that we received execution data
         if (!executionData || !executionData.id) {
-          setResult('Error: Invalid execution data received from StackStorm')
-          setResultType('error')
+          setEvaluation('Error: Invalid execution data received from StackStorm')
+          setEvaluationStatus('error')
           return
-        }
-
-        // Extract the most useful data for expression testing
-        const resultData = {
-          execution_id: executionData.id,
-          status: executionData.status,
-          start_timestamp: executionData.start_timestamp,
-          end_timestamp: executionData.end_timestamp,
-          action: {
-            name: executionData.action?.name,
-            pack: executionData.action?.pack,
-            runner_type: executionData.action?.runner_type
-          },
-          parameters: executionData.parameters || {},
-          result: executionData.result || {},
-          context: executionData.context || {},
-          children: executionData.children || []
         }
 
         // Set the execution data to the task result field instead of context field
         // Format the data according to the current task result format
-        const formattedData = taskResultFormat === 'json'
-          ? JSON.stringify(resultData, null, 2)
-          : yaml.dump(resultData, { indent: 2 })
-        setTaskResult(formattedData)
-        setDetectedTaskResultFormat(taskResultFormat)
-        setResult(responseData.message)
-        setResultType('success')
+        const formattedData = formatData(executionData, dataFormat)
+        setResultData(formattedData)
+        setEvaluation(responseData.message)
+        setEvaluationStatus('success')
 
       } else {
         // Handle HTTP error responses from the backend
         try {
           const errorData = await response.json()
-          setResult(errorData.detail || `Backend Error (${response.status})`)
+          setEvaluation(errorData.detail || `Backend Error (${response.status})`)
         } catch {
           const errorText = await response.text()
-          setResult(`Backend Error (${response.status}): ${errorText}`)
+          setEvaluation(`Backend Error (${response.status}): ${errorText}`)
         }
-        setResultType('error')
+        setEvaluationStatus('error')
       }
     } catch (error) {
       if (error.name === 'TypeError' && error.message.includes('fetch')) {
-        setResult(`Connection Error: Could not connect to backend at http://localhost:8000. 
+        setEvaluation(`Connection Error: Could not connect to backend at http://localhost:8000.
         • Check that the backend is running
         • Ensure the backend is accessible on port 8000`)
       } else if (error.name === 'AbortError') {
-        setResult('Request timed out. The backend server may be slow to respond.')
+        setEvaluation('Request timed out. The backend server may be slow to respond.')
       } else {
-        setResult(`Network Error: ${error.message}`)
+        setEvaluation(`Network Error: ${error.message}`)
       }
-      setResultType('error')
+      setEvaluationStatus('error')
     } finally {
       setSt2Loading(false)
     }
-  }
-
-  const getStatusText = () => {
-    if (isLoading) return 'evaluating'
-    if (resultType === 'success') return `success • ${detectedType}`
-    if (resultType === 'error') return 'error'
-    return 'ready'
-  }
-
-  const getStatusDotClass = () => {
-    if (isLoading) return 'status-dot loading'
-    if (resultType === 'success') return 'status-dot success'
-    if (resultType === 'error') return 'status-dot error'
-    return 'status-dot'
   }
 
   return (
@@ -434,14 +311,13 @@ function App() {
         </h1>
         <p>Expression evaluator for Orquesta, YAQL, and Jinja2</p>
       </header>
-
       <div className="panes-container">
         {/* Query Pane - Full Width at Top */}
         <div className="pane query-pane">
           <div className="pane-header flex items-center justify-between">
             <h3 className="flex items-center gap-sm text-mono text-uppercase">
               <span className="pane-icon">Q</span>
-              Query
+              query
             </h3>
             <div className="query-controls flex gap-sm items-center">
               <div className="btn-group query-type-buttons">
@@ -449,48 +325,48 @@ function App() {
                   onClick={() => setQueryType('orquesta')}
                   className={`btn btn--secondary ${queryType === 'orquesta' ? 'active' : ''}`}
                 >
-                  ORQUESTA
+                  orquesta
                 </button>
                 <button
                   onClick={() => setQueryType('yaql')}
                   className={`btn btn--secondary ${queryType === 'yaql' ? 'active' : ''}`}
                 >
-                  YAQL
+                  yaql
                 </button>
                 <button
                   onClick={() => setQueryType('jinja2')}
                   className={`btn btn--secondary ${queryType === 'jinja2' ? 'active' : ''}`}
                 >
-                  JINJA2
+                  jinja2
                 </button>
               </div>
               <div className="btn-group data-format-buttons">
                 <button
                   className={`btn btn--secondary ${dataFormat === 'yaml' ? 'active' : ''}`}
-                  onClick={() => handleDataFormatChange('yaml')}
+                  onClick={() => handleDataFormatting('yaml')}
                 >
-                  YAML
+                  yaml
                 </button>
                 <button
                   className={`btn btn--secondary ${dataFormat === 'json' ? 'active' : ''}`}
-                  onClick={() => handleDataFormatChange('json')}
+                  onClick={() => handleDataFormatting('json')}
                 >
-                  JSON
+                  json
                 </button>
               </div>
               <div className="action-buttons">
                 <button
                   className="btn btn--secondary"
-                  onClick={clearExpression}
-                  title="Clear expression"
+                  onClick={() => setQuery('')}
+                  title="Clear Query"
                 >
                   clear
                 </button>
                 <button
                   className="btn btn--secondary"
-                  onClick={() => copyToClipboard(expression)}
-                  title="Copy expression"
-                  disabled={!expression}
+                  onClick={() => copyToClipboard(query)}
+                  title="Copy Query"
+                  disabled={!query}
                 >
                   copy
                 </button>
@@ -499,10 +375,11 @@ function App() {
           </div>
           <div className="monaco-editor-container query-editor">
             <Editor
+              // #TODO: put in a style
               height="80px"
-              language={queryType === 'yaql' ? 'javascript' : 'plaintext'}
-              value={expression}
-              onChange={(value) => setExpression(value || '')}
+              // language={queryType === 'yaql' ? 'javascript' : 'plaintext'}
+              value={query}
+              onChange={(value) => setQuery(value || '')}
               options={{
                 ...monacoOptions,
                 placeholder: "<% ctx() %>"
@@ -534,23 +411,23 @@ function App() {
               <div className="data-actions">
                 <button
                   className="btn btn--secondary"
-                  onClick={clearData}
+                  onClick={() => setContextData('')}
                   title={queryType === 'orquesta' ? "Clear context" : "Clear data"}
                 >
                   clear
                 </button>
                 <button
                   className="btn btn--secondary"
-                  onClick={() => copyToClipboard(data)}
+                  onClick={() => copyToClipboard(contextData)}
                   title={queryType === 'orquesta' ? "Copy context" : "Copy data"}
-                  disabled={!data}
+                  disabled={!contextData}
                 >
                   copy
                 </button>
                 <button
                   className="format-btn"
-                  onClick={formatData}
-                  title={`Format ${detectedDataFormat.toUpperCase()}`}
+                  onClick={() => handleDataFormatting(dataFormat)}
+                  title={`Format ${dataFormat}`}
                 >
                   format
                 </button>
@@ -559,10 +436,11 @@ function App() {
           </div>
           <div className="monaco-editor-container data-editor">
             <Editor
+              // #TODO: put in a style
               height="300px"
-              language={dataFormat === 'json' ? 'json' : 'yaml'}
-              value={data}
-              onChange={(value) => handleDataChange(value || '')}
+              language={dataFormat}
+              value={contextData}
+              onChange={(value) => setContextData(value || '')}
               options={monacoOptions}
               onMount={(editor, monaco) => {
                 // Handle Ctrl+Enter shortcut
@@ -576,8 +454,7 @@ function App() {
             />
           </div>
         </div>
-
-        {/* Result Pane - Right Side */}
+        {/* Evaluation Pane - Right Side */}
         <div className="pane">
           <div className="pane-header">
             <h3>
@@ -586,34 +463,22 @@ function App() {
             </h3>
             <div className="data-header">
               <div className="status-indicator">
-                <span className={`status-dot ${resultType === 'success' ? 'success' : resultType === 'error' ? 'error' : isLoading ? 'loading' : ''}`}></span>
+                <span className={`status-dot ${isLoading ? 'loading' : evaluationStatus}`}></span>
               </div>
               <div className="data-actions">
                 <button
                   className="btn btn--secondary"
-                  onClick={() => copyToClipboard(result)}
+                  onClick={() => copyToClipboard(evaluation)}
                   title="Copy result"
-                  disabled={!result}
+                  disabled={!evaluation}
                 >
                   copy
                 </button>
                 <button
                   className="btn btn--secondary"
-                  onClick={() => {
-                    if (result) {
-                      try {
-                        const parsedResult = validateAndParseData(result)
-                        const formattedResult = dataFormat === 'json'
-                          ? JSON.stringify(parsedResult, null, 2)
-                          : yaml.dump(parsedResult, { indent: 2 })
-                        setResult(formattedResult)
-                      } catch (error) {
-                        console.error('Result format error:', error)
-                      }
-                    }
-                  }}
-                  title={`Format ${dataFormat.toUpperCase()}`}
-                  disabled={!result}
+                  onClick={() => handleDataFormatting(dataFormat)}
+                  title={`Format ${dataFormat}`}
+                  disabled={!evaluation}
                 >
                   format
                 </button>
@@ -622,38 +487,28 @@ function App() {
                   disabled={isLoading}
                   className={`btn btn--primary ${isLoading ? 'loading' : ''}`}
                 >
-                  {isLoading ? '' : 'evaluate'}
+                  evaluate
                 </button>
               </div>
             </div>
           </div>
-          {result ? (
-            <Editor
-              height="300px"
-              language={dataFormat === 'json' ? 'json' : 'yaml'}
-              value={result}
-              options={{
-                ...monacoOptions,
-                readOnly: true
-              }}
-            />
-          ) : (
-            <Editor
-              height="300px"
-              language="javascript"
-              value="// awaiting evaluation..."
-              options={{
-                ...monacoOptions,
-                readOnly: true
-              }}
-            />
-          )}
+          <Editor
+            // TODO: put in a style
+            height="300px"
+            language={evaluationStatus === 'error' ? 'plaintext' : dataFormat}
+            value={evaluation}
+            options={{
+              ...monacoOptions,
+              readOnly: true,
+              placeholder: "// awaiting evaluation..."
+            }}
+          />
         </div>
 
         {/* Orquesta-specific panels - Only shown for Orquesta mode */}
         {queryType === 'orquesta' && (
           <>
-            {/* Task Result Panel */}
+            {/* Result Panel */}
             <div className="pane pane-bottom">
               <div className="pane-header">
                 <h3>
@@ -664,23 +519,23 @@ function App() {
                   <div className="data-actions">
                     <button
                       className="btn btn--secondary"
-                      onClick={clearTaskResult}
-                      title="Clear task result"
+                      onClick={() => setResultData('')}
+                      title="Clear result"
                     >
                       clear
                     </button>
                     <button
                       className="btn btn--secondary"
-                      onClick={() => copyToClipboard(taskResult)}
-                      title="Copy task result"
-                      disabled={!taskResult}
+                      onClick={() => copyToClipboard(resultData)}
+                      title="Copy result"
+                      disabled={!resultData}
                     >
                       copy
                     </button>
                     <button
                       className="btn btn--secondary"
-                      onClick={formatTaskResult}
-                      title={`Format ${detectedTaskResultFormat.toUpperCase()}`}
+                      onClick={() => handleDataFormatting(dataFormat)}
+                      title="Format result"
                     >
                       format
                     </button>
@@ -689,10 +544,11 @@ function App() {
               </div>
               <div className="monaco-editor-container task-result-editor">
                 <Editor
+                  // TODO: put in a style
                   height="200px"
-                  language={taskResultFormat === 'json' ? 'json' : 'yaml'}
-                  value={taskResult}
-                  onChange={(value) => handleTaskResultChange(value || '')}
+                  language={dataFormat}
+                  value={resultData}
+                  onChange={(value) => handleResultChange(value || '')}
                   options={monacoOptions}
                   onMount={(editor, monaco) => {
                     // Handle Ctrl+Enter shortcut
@@ -706,7 +562,6 @@ function App() {
                 />
               </div>
             </div>
-
             {/* StackStorm Integration Panel */}
             <div className="pane pane-bottom">
               <div className="pane-header">
@@ -718,7 +573,7 @@ function App() {
                   <div className="data-actions">
                     <button
                       className="btn btn--primary"
-                      onClick={fetchStackStormData}
+                      onClick={fetchStackStormResult}
                       disabled={st2Loading}
                     >
                       fetch result
@@ -730,15 +585,15 @@ function App() {
                 <div className="control-group control-group-inline">
                   <label>Task Status Override:</label>
                   <label className="toggle-label">
-                    <span className={`toggle-text fixed-width ${taskStatus === 'succeeded' ? 'succeeded' : 'failed'}`}>
-                      {taskStatus === 'succeeded' ? 'succeeded' : 'failed    '}
+                    <span className={`toggle-text fixed-width ${taskStatusOverride}`}>
+                      {taskStatusOverride}
                     </span>
                     <div className="toggle-switch">
                       <input
-                        type="checkbox"
-                        checked={taskStatus === 'succeeded'}
-                        onChange={(e) => setTaskStatus(e.target.checked ? 'succeeded' : 'failed')}
                         className="toggle-input"
+                        type="checkbox"
+                        checked={taskStatusOverride === 'succeeded'}
+                        onChange={(e) => setTaskStatus(e.target.checked ? 'succeeded' : 'failed')}
                       />
                       <span className="toggle-slider"></span>
                     </div>

@@ -2,7 +2,8 @@ from fastapi import APIRouter, HTTPException, Path
 from app.models.schemas import EvaluateRequest, EvaluateResponse, ErrorResponse
 import yaql
 import json
-from jinja2 import SandboxedEnvironment, BaseLoader, TemplateSyntaxError, UndefinedError, SecurityError
+from jinja2 import BaseLoader, TemplateSyntaxError, UndefinedError
+from jinja2.sandbox import SandboxedEnvironment, SecurityError
 from orquesta.expressions.base import evaluate as orquesta_evaluate
 
 router = APIRouter()
