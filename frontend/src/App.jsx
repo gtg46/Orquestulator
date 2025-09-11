@@ -1,41 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import * as yaml from 'js-yaml'
-import Editor, { useMonaco } from '@monaco-editor/react'
+import OrquestulatorEditor from './components/OrquestulatorEditor'
 import './App.css'
 
-// Monaco Editor configuration
-const monacoOptions = {
-  minimap: { enabled: false },
-  scrollBeyondLastLine: false,
-  fontSize: 13,
-  fontFamily: 'Consolas, Monaco, "Courier New", monospace',
-  lineHeight: 1.4,
-  wordWrap: 'on',
-  automaticLayout: true,
-  scrollbar: {
-    vertical: 'auto',
-    horizontal: 'auto',
-    useShadows: false,
-    verticalScrollbarSize: 8,
-    horizontalScrollbarSize: 8
-  },
-  overviewRulerBorder: false,
-  hideCursorInOverviewRuler: true,
-  overviewRulerLanes: 0,
-  renderLineHighlight: 'line',
-  selectionHighlight: false,
-  occurrencesHighlight: false,
-  codeLens: false,
-  folding: false,
-  lineNumbers: 'off',
-  glyphMargin: false,
-  lineDecorationsWidth: 0,
-  lineNumbersMinChars: 0,
-  theme: 'vs-dark'
-}
-
 function App() {
-  const monaco = useMonaco()
   const [dataFormat, setDataFormat] = useState('yaml') // 'json' or 'yaml'
   const [queryType, setQueryType] = useState('orquesta')
   const [query, setQuery] = useState('')
@@ -53,13 +21,6 @@ function App() {
   const [st2ApiKey, setSt2ApiKey] = useState('')
   const [st2ExecutionId, setSt2ExecutionId] = useState('')
   const [st2Loading, setSt2Loading] = useState(false)
-
-  // Initialize Monaco theme when Monaco becomes available
-  useEffect(() => {
-    if (monaco) {
-      monaco.editor.setTheme('vs-dark')
-    }
-  }, [monaco])
 
   const validateAndParseData = (dataText) => {
     if (!dataText.trim()) {
@@ -86,11 +47,6 @@ function App() {
   }
 
   const handleDataFormatting = (newFormat) => {
-    if (newFormat === dataFormat) {
-      return
-    }
-
-
     if (contextData.trim()) {
       try {
         // Parse the data as YAML (works for both JSON and YAML input)
@@ -176,7 +132,7 @@ function App() {
         : parsedContextData  // Send data as-is for YAQL/Jinja2
     }
 
-    const endpoint = `/api/evaluate/${queryType}`
+    const endpoint = `http://localhost:8000/api/evaluate/${queryType}`
 
     setIsLoading(true)
     setEvaluationStatus('')
@@ -213,8 +169,8 @@ function App() {
     setIsLoading(false)
   }
 
-  const handleKeyPress = (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+  const handleMonacoKeyDown = (e, monaco) => {
+    if ((e.ctrlKey || e.metaKey) && e.keyCode === monaco.KeyCode.Enter) {
       e.preventDefault()
       evaluateExpression()
     }
@@ -237,7 +193,7 @@ function App() {
     }
 
     // Use the backend proxy instead of direct StackStorm API calls
-    const backendUrl = '/api/stackstorm/execution/' + st2ExecutionId
+    const backendUrl = 'http://localhost:8000/api/stackstorm/execution/' + st2ExecutionId
 
     const requestBody = {
       url: st2Url,
@@ -313,90 +269,80 @@ function App() {
       </header>
       <div className="panes-container">
         {/* Query Pane - Full Width at Top */}
-        <div className="pane query-pane">
-          <div className="pane-header flex items-center justify-between">
-            <h3 className="flex items-center gap-sm text-mono text-uppercase">
+        <div className="pane wide-pane">
+          <div className="pane-header">
+            <h3>
               <span className="pane-icon">Q</span>
               query
             </h3>
-            <div className="query-controls flex gap-sm items-center">
-              <div className="btn-group query-type-buttons">
+            <div className="pane-actions">
+              <div className="btn-group">
                 <button
                   onClick={() => setQueryType('orquesta')}
-                  className={`btn btn--secondary ${queryType === 'orquesta' ? 'active' : ''}`}
+                  className={`btn btn--secondary${queryType === 'orquesta' ? ' active' : ''}`}
                 >
                   orquesta
                 </button>
                 <button
                   onClick={() => setQueryType('yaql')}
-                  className={`btn btn--secondary ${queryType === 'yaql' ? 'active' : ''}`}
+                  className={`btn btn--secondary${queryType === 'yaql' ? ' active' : ''}`}
                 >
                   yaql
                 </button>
                 <button
                   onClick={() => setQueryType('jinja2')}
-                  className={`btn btn--secondary ${queryType === 'jinja2' ? 'active' : ''}`}
+                  className={`btn btn--secondary${queryType === 'jinja2' ? ' active' : ''}`}
                 >
                   jinja2
                 </button>
               </div>
-              <div className="btn-group data-format-buttons">
+              <div className="btn-group">
                 <button
-                  className={`btn btn--secondary ${dataFormat === 'yaml' ? 'active' : ''}`}
+                  className={`btn btn--secondary${dataFormat === 'yaml' ? ' active' : ''}`}
                   onClick={() => handleDataFormatting('yaml')}
                 >
                   yaml
                 </button>
                 <button
-                  className={`btn btn--secondary ${dataFormat === 'json' ? 'active' : ''}`}
+                  className={`btn btn--secondary${dataFormat === 'json' ? ' active' : ''}`}
                   onClick={() => handleDataFormatting('json')}
                 >
                   json
                 </button>
               </div>
-              <div className="action-buttons">
-                <button
-                  className="btn btn--secondary"
-                  onClick={() => setQuery('')}
-                  title="Clear Query"
-                >
-                  clear
-                </button>
-                <button
-                  className="btn btn--secondary"
-                  onClick={() => copyToClipboard(query)}
-                  title="Copy Query"
-                  disabled={!query}
-                >
-                  copy
-                </button>
-              </div>
+              <button
+                className="btn btn--secondary"
+                onClick={() => setQuery('')}
+                title="Clear Query"
+                disabled={!query}
+              >
+                clear
+              </button>
+              <button
+                className="btn btn--secondary"
+                onClick={() => copyToClipboard(query)}
+                title="Copy Query"
+                disabled={!query}
+              >
+                copy
+              </button>
             </div>
           </div>
-          <div className="monaco-editor-container query-editor">
-            <Editor
-              // #TODO: put in a style
-              height="80px"
-              // language={queryType === 'yaql' ? 'javascript' : 'plaintext'}
-              value={query}
-              onChange={(value) => setQuery(value || '')}
-              options={{
-                ...monacoOptions,
-                placeholder: "<% ctx() %>"
-              }}
-              onMount={(editor, monaco) => {
-                // Handle Ctrl+Enter shortcut
-                editor.onKeyDown((e) => {
-                  if ((e.ctrlKey || e.metaKey) && e.keyCode === monaco.KeyCode.Enter) {
-                    e.preventDefault()
-                    handleKeyPress({ key: 'Enter', ctrlKey: e.ctrlKey, metaKey: e.metaKey, preventDefault: () => { } })
-                  }
-                })
-              }}
-            />
-          </div>
-          <div className="keyboard-hint">
-            ctrl+enter to eval
+          <OrquestulatorEditor
+            height="80px"
+            language='plaintext'
+            value={query}
+            onChange={(value) => setQuery(value || '')}
+            options={{
+              placeholder: `${queryType === "orquesta" ? "<% ctx() %>" : "Enter your query here..."}`
+            }}
+          // onMount={(editor, monaco) => {
+          //   // Handle Ctrl+Enter shortcut
+          //   editor.onKeyDown((e) => handleMonacoKeyDown(e, monaco))
+          // }}
+          />
+          < div className="keyboard-hint" >
+            ctrl + enter to eval
           </div>
         </div>
 
@@ -407,52 +353,41 @@ function App() {
               <span className="pane-icon">{queryType === 'orquesta' ? 'C' : 'D'}</span>
               {queryType === 'orquesta' ? 'Context' : 'Data'}
             </h3>
-            <div className="data-header">
-              <div className="data-actions">
-                <button
-                  className="btn btn--secondary"
-                  onClick={() => setContextData('')}
-                  title={queryType === 'orquesta' ? "Clear context" : "Clear data"}
-                >
-                  clear
-                </button>
-                <button
-                  className="btn btn--secondary"
-                  onClick={() => copyToClipboard(contextData)}
-                  title={queryType === 'orquesta' ? "Copy context" : "Copy data"}
-                  disabled={!contextData}
-                >
-                  copy
-                </button>
-                <button
-                  className="format-btn"
-                  onClick={() => handleDataFormatting(dataFormat)}
-                  title={`Format ${dataFormat}`}
-                >
-                  format
-                </button>
-              </div>
+            <div className="pane-actions">
+              <button
+                className="btn btn--secondary"
+                onClick={() => setContextData('')}
+                title={queryType === 'orquesta' ? "Clear context" : "Clear data"}
+                disabled={!contextData}
+              >
+                clear
+              </button>
+              <button
+                className="btn btn--secondary"
+                onClick={() => copyToClipboard(contextData)}
+                title={queryType === 'orquesta' ? "Copy context" : "Copy data"}
+                disabled={!contextData}
+              >
+                copy
+              </button>
+              <button
+                className="format-btn"
+                onClick={() => handleDataFormatting(dataFormat)}
+                title={`Format ${dataFormat}`}
+              >
+                format
+              </button>
             </div>
           </div>
-          <div className="monaco-editor-container data-editor">
-            <Editor
-              // #TODO: put in a style
-              height="300px"
-              language={dataFormat}
-              value={contextData}
-              onChange={(value) => setContextData(value || '')}
-              options={monacoOptions}
-              onMount={(editor, monaco) => {
-                // Handle Ctrl+Enter shortcut
-                editor.onKeyDown((e) => {
-                  if ((e.ctrlKey || e.metaKey) && e.keyCode === monaco.KeyCode.Enter) {
-                    e.preventDefault()
-                    handleKeyPress({ key: 'Enter', ctrlKey: e.ctrlKey, metaKey: e.metaKey, preventDefault: () => { } })
-                  }
-                })
-              }}
-            />
-          </div>
+          <OrquestulatorEditor
+            language={dataFormat}
+            value={contextData}
+            onChange={(value) => setContextData(value || '')}
+          // onMount={(editor, monaco) => {
+          //   // Handle Ctrl+Enter shortcut
+          //   editor.onKeyDown((e) => handleMonacoKeyDown(e, monaco))
+          // }}
+          />
         </div>
         {/* Evaluation Pane - Right Side */}
         <div className="pane">
@@ -461,178 +396,170 @@ function App() {
               <span className="pane-icon">E</span>
               Evaluation
             </h3>
-            <div className="data-header">
+            <div className="pane-actions">
               <div className="status-indicator">
-                <span className={`status-dot ${isLoading ? 'loading' : evaluationStatus}`}></span>
+                <span className={`status-dot ${isLoading ? 'loading' : evaluationStatus}`}>
+                  {isLoading ? 'Loading' : evaluationStatus}
+                </span>
               </div>
-              <div className="data-actions">
-                <button
-                  className="btn btn--secondary"
-                  onClick={() => copyToClipboard(evaluation)}
-                  title="Copy result"
-                  disabled={!evaluation}
-                >
-                  copy
-                </button>
-                <button
-                  className="btn btn--secondary"
-                  onClick={() => handleDataFormatting(dataFormat)}
-                  title={`Format ${dataFormat}`}
-                  disabled={!evaluation}
-                >
-                  format
-                </button>
-                <button
-                  onClick={evaluateExpression}
-                  disabled={isLoading}
-                  className={`btn btn--primary ${isLoading ? 'loading' : ''}`}
-                >
-                  evaluate
-                </button>
-              </div>
+              <button
+                className="btn btn--secondary"
+                onClick={() => {
+                  setEvaluation('')
+                  setEvaluationStatus('')
+                }}
+                title="Clear result"
+                disabled={!evaluation}
+              >
+                clear
+              </button>
+              <button
+                className="btn btn--secondary"
+                onClick={() => copyToClipboard(evaluation)}
+                title="Copy result"
+                disabled={!evaluation}
+              >
+                copy
+              </button>
+              <button
+                className="btn btn--secondary"
+                onClick={() => handleDataFormatting(dataFormat)}
+                title={`Format ${dataFormat}`}
+                disabled={!evaluation}
+              >
+                format
+              </button>
+              <button
+                onClick={evaluateExpression}
+                disabled={isLoading}
+                className="btn btn--primary"
+              >
+                evaluate
+              </button>
             </div>
           </div>
-          <Editor
-            // TODO: put in a style
-            height="300px"
+          <OrquestulatorEditor
             language={evaluationStatus === 'error' ? 'plaintext' : dataFormat}
             value={evaluation}
             options={{
-              ...monacoOptions,
               readOnly: true,
               placeholder: "// awaiting evaluation..."
             }}
           />
         </div>
 
-        {/* Orquesta-specific panels - Only shown for Orquesta mode */}
-        {queryType === 'orquesta' && (
-          <>
-            {/* Result Panel */}
-            <div className="pane pane-bottom">
-              <div className="pane-header">
-                <h3>
-                  <span className="pane-icon">R</span>
-                  Result
-                </h3>
-                <div className="data-header">
-                  <div className="data-actions">
-                    <button
-                      className="btn btn--secondary"
-                      onClick={() => setResultData('')}
-                      title="Clear result"
-                    >
-                      clear
-                    </button>
-                    <button
-                      className="btn btn--secondary"
-                      onClick={() => copyToClipboard(resultData)}
-                      title="Copy result"
-                      disabled={!resultData}
-                    >
-                      copy
-                    </button>
-                    <button
-                      className="btn btn--secondary"
-                      onClick={() => handleDataFormatting(dataFormat)}
-                      title="Format result"
-                    >
-                      format
-                    </button>
-                  </div>
-                </div>
-              </div>
-              <div className="monaco-editor-container task-result-editor">
-                <Editor
-                  // TODO: put in a style
-                  height="200px"
-                  language={dataFormat}
-                  value={resultData}
-                  onChange={(value) => handleResultChange(value || '')}
-                  options={monacoOptions}
-                  onMount={(editor, monaco) => {
-                    // Handle Ctrl+Enter shortcut
-                    editor.onKeyDown((e) => {
-                      if ((e.ctrlKey || e.metaKey) && e.keyCode === monaco.KeyCode.Enter) {
-                        e.preventDefault()
-                        handleKeyPress({ key: 'Enter', ctrlKey: e.ctrlKey, metaKey: e.metaKey, preventDefault: () => { } })
-                      }
-                    })
-                  }}
-                />
-              </div>
+        {/* Orquesta-specific panels - Always rendered but hidden when not in Orquesta mode */}
+        {/* Result Panel */}
+        <div className={`pane pane-bottom ${queryType !== 'orquesta' ? 'hidden' : ''}`}>
+          <div className="pane-header">
+            <h3>
+              <span className="pane-icon">R</span>
+              Result
+            </h3>
+            <div className="pane-actions">
+              <button
+                className="btn btn--secondary"
+                onClick={() => setResultData('')}
+                title="Clear result"
+                disabled={!resultData}
+              >
+                clear
+              </button>
+              <button
+                className="btn btn--secondary"
+                onClick={() => copyToClipboard(resultData)}
+                title="Copy result"
+                disabled={!resultData}
+              >
+                copy
+              </button>
+              <button
+                className="btn btn--secondary"
+                onClick={() => handleDataFormatting(dataFormat)}
+                title="Format result"
+                disabled={!resultData}
+              >
+                format
+              </button>
             </div>
-            {/* StackStorm Integration Panel */}
-            <div className="pane pane-bottom">
-              <div className="pane-header">
-                <h3>
-                  <span className="pane-icon">S</span>
-                  StackStorm
-                </h3>
-                <div className="data-header">
-                  <div className="data-actions">
-                    <button
-                      className="btn btn--primary"
-                      onClick={fetchStackStormResult}
-                      disabled={st2Loading}
-                    >
-                      fetch result
-                    </button>
-                  </div>
-                </div>
-              </div>
-              <div className="stackstorm-controls">
-                <div className="control-group control-group-inline">
-                  <label>Task Status Override:</label>
-                  <label className="toggle-label">
-                    <span className={`toggle-text fixed-width ${taskStatusOverride}`}>
-                      {taskStatusOverride}
-                    </span>
-                    <div className="toggle-switch">
-                      <input
-                        className="toggle-input"
-                        type="checkbox"
-                        checked={taskStatusOverride === 'succeeded'}
-                        onChange={(e) => setTaskStatus(e.target.checked ? 'succeeded' : 'failed')}
-                      />
-                      <span className="toggle-slider"></span>
-                    </div>
-                  </label>
-                </div>
-                <div className="control-group">
-                  <label>StackStorm URL:</label>
-                  <input
-                    type="text"
-                    value={st2Url}
-                    onChange={(e) => setSt2Url(e.target.value)}
-                    placeholder="http://localhost:9101"
-                    className="st2-input"
-                  />
-                </div>
-                <div className="control-group">
-                  <label>API Key:</label>
-                  <input
-                    type="password"
-                    value={st2ApiKey}
-                    onChange={(e) => setSt2ApiKey(e.target.value)}
-                    placeholder="Optional API key"
-                    className="st2-input"
-                  />
-                </div>
-                <div className="control-group">
-                  <label>Execution ID:</label>
-                  <input
-                    type="text"
-                    value={st2ExecutionId}
-                    onChange={(e) => setSt2ExecutionId(e.target.value)}
-                    placeholder="5f2b6c8d9e1a2b3c4d5e6f7g"
-                    className="st2-input"
-                  />
-                </div>
-              </div>
+          </div>
+          <OrquestulatorEditor
+            language={dataFormat}
+            value={resultData}
+            onChange={(value) => setResultData(value || '')}
+          // onMount={(editor, monaco) => {
+          //   // Handle Ctrl+Enter shortcut
+          //   editor.onKeyDown((e) => handleMonacoKeyDown(e, monaco))
+          // }}
+          />
+        </div>
+        {/* StackStorm Integration Panel */}
+        <div className={`pane pane-bottom ${queryType !== 'orquesta' ? 'hidden' : ''}`}>
+          <div className="pane-header">
+            <h3>
+              <span className="pane-icon">S</span>
+              StackStorm
+            </h3>
+            <div className="pane-actions">
+              <button
+                className="btn btn--primary"
+                onClick={fetchStackStormResult}
+                disabled={st2Loading || !st2Url || !st2ExecutionId || !st2ApiKey}
+              >
+                fetch result
+              </button>
             </div>
-          </>
-        )}
+          </div>
+          <div className="stackstorm-controls">
+            <div className="control-group">
+              <label>StackStorm URL:</label>
+              <input
+                type="text"
+                value={st2Url}
+                onChange={(e) => setSt2Url(e.target.value)}
+                placeholder="http://localhost:9101"
+                className="st2-input"
+              />
+            </div>
+            <div className="control-group">
+              <label>API Key:</label>
+              <input
+                type="password"
+                value={st2ApiKey}
+                onChange={(e) => setSt2ApiKey(e.target.value)}
+                placeholder="Optional API key"
+                className="st2-input"
+              />
+            </div>
+            <div className="control-group">
+              <label>Execution ID:</label>
+              <input
+                type="text"
+                value={st2ExecutionId}
+                onChange={(e) => setSt2ExecutionId(e.target.value)}
+                placeholder="5f2b6c8d9e1a2b3c4d5e6f7g"
+                className="st2-input"
+              />
+            </div>
+            <div className="control-group control-group-inline">
+              <label>Task Status Override:</label>
+              <label className="toggle-label">
+                <span className={`toggle-text fixed-width ${taskStatusOverride}`}>
+                  {taskStatusOverride}
+                </span>
+                <div className="toggle-switch">
+                  <input
+                    className="toggle-input"
+                    type="checkbox"
+                    checked={taskStatusOverride === 'succeeded'}
+                    onChange={(e) => setTaskStatus(e.target.checked ? 'succeeded' : 'failed')}
+                  />
+                  <span className="toggle-slider"></span>
+                </div>
+              </label>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Footer */}
