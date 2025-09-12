@@ -1,0 +1,48 @@
+# Project-wide ignores
+
+# Dependencies (should be in frontend/.gitignore but adding here as backup)
+**/node_modules/
+
+# Session/Cookie files (contain sensitive data)
+cookies.txt
+*.cookies
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Docker overrides
+docker-compose.override.yml
+docker-compose.*.yml
+!docker-compose.yml
+
+# IDE workspace files
+*.code-workspace
+.vscode/settings.json
+.vscode/launch.json
+.vscode/tasks.json
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+logs/
+
+# Backup files
+*.bak
+*.backup
