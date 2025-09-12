@@ -46,6 +46,11 @@ function App() {
     setAuthError('')
   }
 
+  const handleSessionExpired = (message) => {
+    setIsAuthenticated(false)
+    setAuthError(message || 'Session expired. Please log in again.')
+  }
+
   // Show loading state while checking authentication
   if (isCheckingAuth) {
     return (
@@ -61,15 +66,10 @@ function App() {
   return (
     <div className="app">
       <Header />
-      {authError && (
-        <div className="alert error" style={{ margin: '16px' }}>
-          {authError}
-        </div>
-      )}
       {isAuthenticated ? (
-        <MainPage />
+        <MainPage onSessionExpired={handleSessionExpired} />
       ) : (
-        <PassPhrase onAuthSuccess={handleAuthSuccess} />
+        <PassPhrase onAuthSuccess={handleAuthSuccess} authError={authError} />
       )}
     </div>
   )

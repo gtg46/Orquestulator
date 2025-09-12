@@ -1,9 +1,9 @@
 import { useState } from 'react'
 
-function PassPhrase({ onAuthSuccess }) {
+function PassPhrase({ onAuthSuccess, authError }) {
     const [passphrase, setPassphrase] = useState('')
     const [isLoading, setIsLoading] = useState(false)
-    const [error, setError] = useState('')
+    const [error, setError] = useState(authError || '')
 
     const handleSubmit = async (e) => {
         e.preventDefault()
@@ -55,13 +55,13 @@ function PassPhrase({ onAuthSuccess }) {
 
     return (
         <div className="passphrase-container">
+            {(error) && (
+                <div className="alert error">
+                    {error}
+                </div>
+            )}
             <form onSubmit={handleSubmit} className="pane passphrase-pane control-group">
                 <label>Passphrase:</label>
-                {error && (
-                    <div className="alert error">
-                        {error}
-                    </div>
-                )}
                 <input
                     type="password"
                     className="input"

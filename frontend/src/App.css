@@ -459,6 +459,7 @@
 
 .passphrase-container {
   display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
   flex: 1;
@@ -482,6 +483,8 @@
 .alert {
   font-size: 0.75rem;
   margin-top: var(--spacing-xs);
+  margin-bottom: var(--spacing-md);
+  min-width: 250px;
   font-family: var(--font-mono);
   text-align: center;
   padding: var(--spacing-xs);

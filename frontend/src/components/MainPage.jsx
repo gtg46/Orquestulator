@@ -2,7 +2,7 @@ import { useState } from 'react'
 import * as yaml from 'js-yaml'
 import OrquestulatorEditor from './OrquestulatorEditor'
 
-function MainPage() {
+function MainPage({ onSessionExpired }) {
     const [dataFormat, setDataFormat] = useState('yaml') // 'json' or 'yaml'
     const [queryType, setQueryType] = useState('orquesta')
     const [query, setQuery] = useState('')
@@ -20,6 +20,60 @@ function MainPage() {
     const [st2ApiKey, setSt2ApiKey] = useState('')
     const [st2ExecutionId, setSt2ExecutionId] = useState('')
     const [st2Loading, setSt2Loading] = useState(false)
+
+    // Helper function to make authenticated API calls
+    const makeAuthenticatedRequest = async (url, options = {}) => {
+        const defaultOptions = {
+            credentials: 'include', // Include session cookies
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                ...options.headers
+            },
+            ...options
+        }
+
+        try {
+            const response = await fetch(url, defaultOptions)
+
+            // Handle session timeout
+            if (response.status === 401) {
+                if (onSessionExpired) {
+                    onSessionExpired('Your session has expired.')
+                }
+                return null
+            }
+
+            return response
+        } catch (error) {
+            console.error('API request failed:', error)
+            throw error
+        }
+    }
+
+    // Helper function to save data to session
+    const saveToSession = async (key, value) => {
+        try {
+            const response = await makeAuthenticatedRequest('http://localhost:8000/api/session/data', {
+                method: 'POST',
+                body: JSON.stringify({ [key]: value })
+            })
+
+            if (response && !response.ok) {
+                console.warn('Failed to save session data:', response.statusText)
+            }
+        } catch (error) {
+            console.warn('Failed to save session data:', error)
+        }
+    }
+
+    // Save StackStorm API key when it changes
+    const handleSt2ApiKeyChange = (newApiKey) => {
+        setSt2ApiKey(newApiKey)
+        if (newApiKey.trim()) {
+            saveToSession('st2_api_key', newApiKey)
+        }
+    }
 
     const validateAndParseData = (dataText) => {
         if (!dataText.trim()) {
@@ -137,14 +191,16 @@ function MainPage() {
         setEvaluationStatus('')
 
         try {
-            const response = await fetch(`${endpoint}`, {
+            const response = await makeAuthenticatedRequest(endpoint, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                },
                 body: JSON.stringify(payload)
             })
+
+            // If session expired, makeAuthenticatedRequest returns null
+            if (!response) {
+                setIsLoading(false)
+                return
+            }
 
             if (response.ok) {
                 const responseData = await response.json()
@@ -201,14 +257,16 @@ function MainPage() {
 
         setSt2Loading(true)
         try {
-            const response = await fetch(backendUrl, {
+            const response = await makeAuthenticatedRequest(backendUrl, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                },
                 body: JSON.stringify(requestBody)
             })
+
+            // If session expired, makeAuthenticatedRequest returns null
+            if (!response) {
+                setSt2Loading(false)
+                return
+            }
 
             if (response.ok) {
                 const responseData = await response.json()
@@ -511,7 +569,7 @@ function MainPage() {
                             <input
                                 type="password"
                                 value={st2ApiKey}
-                                onChange={(e) => setSt2ApiKey(e.target.value)}
+                                onChange={(e) => handleSt2ApiKeyChange(e.target.value)}
                                 placeholder="Optional API key"
                                 className="input"
                             />

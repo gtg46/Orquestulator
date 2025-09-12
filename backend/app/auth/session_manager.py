@@ -2,7 +2,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional, Any
 
-DEFAULT_SESSION_TIMEOUT_HOURS = 8
+DEFAULT_SESSION_TIMEOUT_HOURS = 2
 DEFAULT_PROACTIVE_CLEANUP = True
 
 
@@ -102,7 +102,11 @@ class SessionManager:
             return False
 
         # Move to end (most recent)
-        self.session_activity_order.remove(session_id)
+        try:
+            self.session_activity_order.remove(session_id)
+        except ValueError:
+            # Session ID not in activity order list - add it
+            pass
         self.session_activity_order.append(session_id)
 
         session["last_activity"] = datetime.now(timezone.utc)
@@ -149,7 +153,13 @@ class SessionManager:
 
     def _delete_session(self, session_id: str) -> Optional[Dict[str, Any]]:
         """Delete a session. Returns session data if session existed, None otherwise."""
-        self.session_activity_order.remove(session_id)
+        # Safely remove from activity order list (might not be present due to race conditions)
+        try:
+            self.session_activity_order.remove(session_id)
+        except ValueError:
+            # Session ID not in activity order list - this can happen in edge cases
+            pass
+
         return self.sessions.pop(session_id, None)
 
 
