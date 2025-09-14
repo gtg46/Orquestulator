@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import backendClient from '../api/backendClient'
 
 function PassPhrase({ onAuthSuccess, authError }) {
     const [passphrase, setPassphrase] = useState('')
@@ -17,31 +18,18 @@ function PassPhrase({ onAuthSuccess, authError }) {
         setError('')
 
         try {
-            const response = await fetch('http://localhost:8000/api/session/auth', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                credentials: 'include', // Important: includes cookies
-                body: JSON.stringify({
-                    passphrase: passphrase
-                })
-            })
+            const data = await backendClient.authenticate(passphrase)
 
-            if (response.ok) {
-                const data = await response.json()
+            if (data) {
                 // Clear the form
                 setPassphrase('')
                 // Notify parent component of successful authentication
                 if (onAuthSuccess) {
                     onAuthSuccess(data)
                 }
-            } else {
-                const errorData = await response.json()
-                setError(errorData.detail || 'Authentication failed')
             }
         } catch (error) {
-            setError('Network error. Please check if the backend is running.')
+            setError(error.message || 'Network error. Please check if the backend is running.')
         }
 
         setIsLoading(false)

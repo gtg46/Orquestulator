@@ -1,6 +1,10 @@
 from fastapi import APIRouter, HTTPException, Path, Depends, status
-from app.models.schemas import EvaluateRequest, EvaluateResponse, ErrorResponse
-from app.middleware.auth import require_valid_session
+from app.models.evaluation_schemas import (
+    EvaluateRequest,
+    EvaluateResponse,
+    ErrorResponse,
+)
+from app.lib.auth_middleware import require_valid_session
 import yaql
 import json
 from jinja2 import BaseLoader, TemplateSyntaxError, UndefinedError

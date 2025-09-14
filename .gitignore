@@ -1,8 +1,5 @@
 # Project-wide ignores
 
-# Dependencies (should be in frontend/.gitignore but adding here as backup)
-**/node_modules/
-
 # Session/Cookie files (contain sensitive data)
 cookies.txt
 *.cookies
@@ -11,6 +8,8 @@ cookies.txt
 .env
 .env.local
 .env.*.local
+# But track example environment files
+!.env.*.example
 
 # Docker overrides
 docker-compose.override.yml

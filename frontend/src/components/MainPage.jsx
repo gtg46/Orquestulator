@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import * as yaml from 'js-yaml'
+import backendClient from '../api/backendClient'
 import OrquestulatorEditor from './OrquestulatorEditor'
 
 function MainPage({ onSessionExpired }) {
@@ -21,50 +22,9 @@ function MainPage({ onSessionExpired }) {
     const [st2ExecutionId, setSt2ExecutionId] = useState('')
     const [st2Loading, setSt2Loading] = useState(false)
 
-    // Helper function to make authenticated API calls
-    const makeAuthenticatedRequest = async (url, options = {}) => {
-        const defaultOptions = {
-            credentials: 'include', // Include session cookies
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-                ...options.headers
-            },
-            ...options
-        }
-
-        try {
-            const response = await fetch(url, defaultOptions)
-
-            // Handle session timeout
-            if (response.status === 401) {
-                if (onSessionExpired) {
-                    onSessionExpired('Your session has expired.')
-                }
-                return null
-            }
-
-            return response
-        } catch (error) {
-            console.error('API request failed:', error)
-            throw error
-        }
-    }
-
     // Helper function to save data to session
     const saveToSession = async (key, value) => {
-        try {
-            const response = await makeAuthenticatedRequest('http://localhost:8000/api/session/data', {
-                method: 'POST',
-                body: JSON.stringify({ [key]: value })
-            })
-
-            if (response && !response.ok) {
-                console.warn('Failed to save session data:', response.statusText)
-            }
-        } catch (error) {
-            console.warn('Failed to save session data:', error)
-        }
+        await backendClient.saveSessionData(key, value)
     }
 
     // Save StackStorm API key when it changes
@@ -185,40 +145,32 @@ function MainPage({ onSessionExpired }) {
                 : parsedContextData  // Send data as-is for YAQL/Jinja2
         }
 
-        const endpoint = `http://localhost:8000/api/evaluate/${queryType}`
-
         setIsLoading(true)
         setEvaluationStatus('')
 
         try {
-            const response = await makeAuthenticatedRequest(endpoint, {
-                method: 'POST',
-                body: JSON.stringify(payload)
-            })
+            const responseData = await backendClient.evaluateExpression(
+                queryType,
+                query,
+                queryType === 'orquesta'
+                    ? {
+                        ...parsedContextData,
+                        __task_status: taskStatusOverride,
+                        __task_result: parsedResultData
+                    }
+                    : parsedContextData
+            )
 
-            // If session expired, makeAuthenticatedRequest returns null
-            if (!response) {
-                setIsLoading(false)
-                return
-            }
-
-            if (response.ok) {
-                const responseData = await response.json()
-
+            if (responseData) {
                 // Format result according to current dataFormat
                 // TODO: This might fail if the result is a primitive (string, number, boolean)
                 const formattedResult = formatData(responseData.result, dataFormat)
 
                 setEvaluation(formattedResult)
                 setEvaluationStatus('success')
-            } else {
-                const errorData = await response.json()
-                const errorMessage = errorData.detail?.error || errorData.detail || 'Unknown error'
-                setEvaluation(`Error: ${errorMessage}`)
-                setEvaluationStatus('error')
             }
         } catch (error) {
-            setEvaluation(`Network Error: ${error.message}`)
+            setEvaluation(`Error: ${error.message}`)
             setEvaluationStatus('error')
         }
         setIsLoading(false)
@@ -247,29 +199,15 @@ function MainPage({ onSessionExpired }) {
             return
         }
 
-        // Use the backend proxy instead of direct StackStorm API calls
-        const backendUrl = 'http://localhost:8000/api/stackstorm/execution/' + st2ExecutionId
-
-        const requestBody = {
-            url: st2Url,
-            api_key: st2ApiKey || null
-        }
-
         setSt2Loading(true)
         try {
-            const response = await makeAuthenticatedRequest(backendUrl, {
-                method: 'POST',
-                body: JSON.stringify(requestBody)
-            })
+            const responseData = await backendClient.fetchStackStormExecution(
+                st2ExecutionId,
+                st2Url,
+                st2ApiKey
+            )
 
-            // If session expired, makeAuthenticatedRequest returns null
-            if (!response) {
-                setSt2Loading(false)
-                return
-            }
-
-            if (response.ok) {
-                const responseData = await response.json()
+            if (responseData) {
                 const executionData = responseData.execution_data
 
                 // Validate that we received execution data
@@ -285,28 +223,10 @@ function MainPage({ onSessionExpired }) {
                 setResultData(formattedData)
                 setEvaluation(responseData.message)
                 setEvaluationStatus('success')
-
-            } else {
-                // Handle HTTP error responses from the backend
-                try {
-                    const errorData = await response.json()
-                    setEvaluation(errorData.detail || `Backend Error (${response.status})`)
-                } catch {
-                    const errorText = await response.text()
-                    setEvaluation(`Backend Error (${response.status}): ${errorText}`)
-                }
-                setEvaluationStatus('error')
             }
         } catch (error) {
-            if (error.name === 'TypeError' && error.message.includes('fetch')) {
-                setEvaluation(`Connection Error: Could not connect to backend at http://localhost:8000.
-        • Check that the backend is running
-        • Ensure the backend is accessible on port 8000`)
-            } else if (error.name === 'AbortError') {
-                setEvaluation('Request timed out. The backend server may be slow to respond.')
-            } else {
-                setEvaluation(`Network Error: ${error.message}`)
-            }
+            const errorMessage = backendClient.formatNetworkError(error)
+            setEvaluation(errorMessage)
             setEvaluationStatus('error')
         } finally {
             setSt2Loading(false)

@@ -5,3 +5,5 @@ pydantic
 jinja2
 orquesta
 httpx
+slowapi
+python-dotenv

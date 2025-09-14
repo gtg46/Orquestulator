@@ -1,43 +1,48 @@
 from fastapi import APIRouter, HTTPException, Response, Request, Depends, status
-import os
-from app.auth.session_manager import session_manager
-from app.middleware.auth import get_session_id_from_request, require_valid_session
-from app.models.schemas import (
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from app.lib.config import config
+from app.lib.session_manager import session_manager
+from app.lib.auth_middleware import (
+    get_session_id_from_request,
+    require_valid_session,
+)
+from app.models.session_schemas import (
     AuthRequest,
     AuthResponse,
     AuthStatusResponse,
     SessionDataRequest,
     SessionDataResponse,
+    SessionCountResponse,
 )
 
 router = APIRouter()
 
-# Configuration
-PASSPHRASE = os.getenv("ORQ_PASSPHRASE", "orquesta2025")  # Default for development
-COOKIE_NAME = "orq_session"
-COOKIE_SETTINGS = {
-    "httponly": True,
-    "secure": False,  # Set to True in production with HTTPS
-    "samesite": "lax",  # Allow cross-site requests for development
-}
+# Get limiter from app state (set in main.py)
+limiter = Limiter(key_func=get_remote_address)
 
 
 # Endpoints
 @router.post("/auth", response_model=AuthResponse)
-async def authenticate(request: AuthRequest, response: Response):
+@limiter.limit(config.AUTH_RATE_LIMIT)  # Use configurable rate limit
+async def authenticate(request: Request, auth_request: AuthRequest, response: Response):
     """
     Authenticate user with passphrase and create session
     """
-    if request.passphrase != PASSPHRASE:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid passphrase"
-        )
+    # If passphrase authentication is enabled, check passphrase
+    if config.PASSPHRASE_AUTH:
+        if not auth_request.passphrase or auth_request.passphrase != config.PASSPHRASE:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid passphrase"
+            )
 
     # Create new session
-    session_id = session_manager.create_session({"authenticated": True})
+    session_id = session_manager.create_session()
 
     # Set session cookie
-    response.set_cookie(key=COOKIE_NAME, value=session_id, **COOKIE_SETTINGS)
+    response.set_cookie(
+        key=config.SESSION_COOKIE_NAME, value=session_id, **config.get_cookie_settings()
+    )
 
     return AuthResponse(success=True, message="Successfully authenticated")
 
@@ -45,18 +50,23 @@ async def authenticate(request: AuthRequest, response: Response):
 @router.get("/status", response_model=AuthStatusResponse)
 async def get_auth_status(request: Request):
     """
-    Check if user is authenticated
+    Check if user is authenticated and return auth configuration
     """
     session_id = get_session_id_from_request(request)
     if not session_id:
-        return AuthStatusResponse(authenticated=False)
+        return AuthStatusResponse(
+            authenticated=False, passphrase_required=config.PASSPHRASE_AUTH
+        )
 
     session = session_manager.get_session(session_id)
     if not session:
-        return AuthStatusResponse(authenticated=False)
+        return AuthStatusResponse(
+            authenticated=False, passphrase_required=config.PASSPHRASE_AUTH
+        )
 
     return AuthStatusResponse(
         authenticated=True,
+        passphrase_required=config.PASSPHRASE_AUTH,
         last_activity=session["last_activity"].isoformat(),
     )
 
@@ -96,3 +106,12 @@ async def get_session_data(session_id: str = Depends(require_valid_session)):
         )
 
     return SessionDataResponse(success=True, data=data)
+
+
+@router.get("/count", response_model=SessionCountResponse)
+async def get_session_count(session_id: str = Depends(require_valid_session)):
+    """
+    Get session count information for monitoring (auth required)
+    """
+    count_info = session_manager.get_session_count_info()
+    return SessionCountResponse(**count_info)
