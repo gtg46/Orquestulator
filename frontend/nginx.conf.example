@@ -1,0 +1,50 @@
+# Example Nginx configuration for serving a SPA with a backend API proxy and SSL
+events {
+    worker_connections 1024;
+}
+
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+
+    server {
+        listen 8443 ssl http2;
+        server_name _;
+
+        ssl_certificate /opt/orquestulator/certs/selfsigned.crt;
+        ssl_certificate_key /opt/orquestulator/certs/selfsigned.key;
+        ssl_protocols TLSv1.2 TLSv1.3;
+
+        root /opt/orquestulator/frontend/dist;
+        index index.html;
+
+        location /api/ {
+            proxy_pass http://localhost:8000/api/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location / {
+            try_files $uri $uri/ /index.html;
+            add_header X-Frame-Options "SAMEORIGIN" always;
+            add_header X-Content-Type-Options "nosniff" always;
+            add_header X-XSS-Protection "1; mode=block" always;
+            add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        }
+
+        location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+            expires 1y;
+            add_header Cache-Control "public, immutable";
+            access_log off;
+        }
+
+        gzip on;
+        gzip_vary on;
+        gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+
+        access_log /opt/orquestulator/logs/nginx_access.log;
+        error_log /opt/orquestulator/logs/nginx_error.log;
+    }
+}

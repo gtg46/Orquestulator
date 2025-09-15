@@ -4,13 +4,6 @@
 cookies.txt
 *.cookies
 
-# Environment files
-.env
-.env.local
-.env.*.local
-# But track example environment files
-!.env.*.example
-
 # Docker overrides
 docker-compose.override.yml
 docker-compose.*.yml

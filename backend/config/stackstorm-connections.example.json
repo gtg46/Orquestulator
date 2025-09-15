@@ -1,0 +1,17 @@
+{
+  "default": "st2-qa",
+  "connections": [
+    {
+      "id": "st2-prod",
+      "alias": "StackStorm Production",
+      "url": "https://stackstorm-prod.example.com:9101",
+      "api_key": "your_prod_api_key_here"
+    },
+    {
+      "id": "st2-qa",
+      "alias": "StackStorm QA",
+      "url": "https://stackstorm-qa.example.com:9101",
+      "api_key": "your_qa_api_key_here"
+    }
+  ]
+}
