@@ -10,7 +10,7 @@
   --border-primary: #30363d;
   --border-secondary: #21262d;
   --text-primary: #f0f6fc;
-  --text-secondary: #8b949e;
+  --text-secondary: #9ca3af;
   --text-muted: #6e7681;
   --text-tertiary: #484f58;
   --accent-primary: #58a6ff;
@@ -38,6 +38,7 @@
   /* Common properties */
   --border-radius: 4px;
   --transition: all 0.15s ease;
+  --border-default: 1px solid var(--border-primary);
   
   font-family: var(--font-sans);
   line-height: 1.5;

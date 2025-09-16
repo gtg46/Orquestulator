@@ -84,7 +84,9 @@ class BackendClient {
     try {
       const response = await this.makeRequest('/api/session/data', {
         method: 'POST',
-        body: JSON.stringify({ [key]: value })
+        body: JSON.stringify({ 
+          data: { [key]: value }
+        })
       })
 
       if (response && !response.ok) {
@@ -95,15 +97,15 @@ class BackendClient {
     }
   }
 
-  async getSessionCount() {
-    const response = await this.makeRequest('/api/session/count')
+  async getSessionData() {
+    const response = await this.makeRequest('/api/session/data')
     
     if (!response) return null
     
     if (response.ok) {
       return await response.json()
     } else {
-      throw new Error('Failed to get session count')
+      throw new Error('Failed to get session data')
     }
   }
 
@@ -133,13 +135,49 @@ class BackendClient {
   /**
    * StackStorm Integration
    */
-  async fetchStackStormExecution(executionId, st2Url, apiKey) {
-    const response = await this.makeRequest(`/api/stackstorm/execution/${executionId}`, {
-      method: 'POST',
-      body: JSON.stringify({
-        url: st2Url,
-        api_key: apiKey || null
-      })
+  
+  /**
+   * Get available StackStorm connections and current configuration
+   * @returns {Promise<Object>} ConnectionResponse with connections, default, current, and custom_connection
+   */
+  async getStackStormConnections() {
+    const response = await this.makeRequest('/api/stackstorm/connection')
+
+    if (!response) return null
+
+    if (response.ok) {
+      return await response.json()
+    } else {
+      const errorData = await response.json()
+      throw new Error(errorData.detail || 'Failed to get StackStorm connections')
+    }
+  }
+
+  /**
+   * Set the user's StackStorm connection configuration
+   * @param {string} connectionId - Connection ID or "custom" for custom connection
+   * @param {Object} customConnection - Custom connection object with {url, api_key?}
+   * @returns {Promise<Object>} ConnectionUpdateResponse with success and message
+   */
+  async setStackStormConnection(connectionId, customConnection = null) {
+    const body = {
+      current: connectionId
+    }
+
+    // Validate custom connection format according to CustomConnection schema
+    if (customConnection) {
+      if (!customConnection.url) {
+        throw new Error('Custom connection must have a url property')
+      }
+      body.custom_connection = {
+        url: customConnection.url,
+        api_key: customConnection.api_key || null
+      }
+    }
+
+    const response = await this.makeRequest('/api/stackstorm/connection', {
+      method: 'PUT',
+      body: JSON.stringify(body)
     })
 
     if (!response) return null
@@ -147,14 +185,62 @@ class BackendClient {
     if (response.ok) {
       return await response.json()
     } else {
-      // Handle HTTP error responses from the backend
-      try {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || `Backend Error (${response.status})`)
-      } catch {
-        const errorText = await response.text()
-        throw new Error(`Backend Error (${response.status}): ${errorText}`)
-      }
+      const errorData = await response.json()
+      throw new Error(errorData.detail || 'Failed to set StackStorm connection')
+    }
+  }
+
+  /**
+   * Test the current StackStorm connection configuration
+   * @returns {Promise<Object>} ConnectionTestResponse with success and message
+   */
+  async testStackStormConnection() {
+    const response = await this.makeRequest('/api/stackstorm/connection/test', {
+      method: 'POST'
+    })
+
+    if (!response) return null
+
+    if (response.ok) {
+      return await response.json()
+    } else {
+      const errorData = await response.json()
+      throw new Error(errorData.detail || 'Failed to test StackStorm connection')
+    }
+  }
+
+  /**
+   * Get a list of recent StackStorm executions from the configured connection
+   * @returns {Promise<Object>} ExecutionsListResponse with executions array
+   */
+  async getStackStormExecutions() {
+    const response = await this.makeRequest('/api/stackstorm/executions')
+
+    if (!response) return null
+
+    if (response.ok) {
+      return await response.json()
+    } else {
+      const errorData = await response.json()
+      throw new Error(errorData.detail || 'Failed to get StackStorm executions')
+    }
+  }
+
+  /**
+   * Get specific StackStorm execution data using the configured connection
+   * @param {string} executionId - The execution ID to fetch
+   * @returns {Promise<Object>} ExecutionResponse with execution_data and message
+   */
+  async getStackStormExecution(executionId) {
+    const response = await this.makeRequest(`/api/stackstorm/executions/${executionId}`)
+
+    if (!response) return null
+
+    if (response.ok) {
+      return await response.json()
+    } else {
+      const errorData = await response.json()
+      throw new Error(errorData.detail || 'Failed to get StackStorm execution')
     }
   }
 

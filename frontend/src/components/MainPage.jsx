@@ -1,37 +1,189 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import * as yaml from 'js-yaml'
 import backendClient from '../api/backendClient'
 import OrquestulatorEditor from './OrquestulatorEditor'
+import { useSessionState } from '../hooks/useSessionState'
 
-function MainPage({ onSessionExpired }) {
-    const [dataFormat, setDataFormat] = useState('yaml') // 'json' or 'yaml'
-    const [queryType, setQueryType] = useState('orquesta')
-    const [query, setQuery] = useState('')
-    const [contextData, setContextData] = useState('')
-    const [evaluation, setEvaluation] = useState('')
+function MainPage() {
+
+    const [dataFormat, setDataFormat, setDataFormatImmediate] = useSessionState('orquestulator_data_format', 'yaml')
+    const [queryType, setQueryType, setQueryTypeImmediate] = useSessionState('orquestulator_query_type', 'orquesta')
+    const [query, setQuery, setQueryImmediate] = useSessionState('orquestulator_query', '')
+    const [contextData, setContextData, setContextDataImmediate] = useSessionState('orquestulator_context_data', '')
+    const [evaluation, setEvaluation, setEvaluationImmediate] = useSessionState('orquestulator_evaluation', '')
     const [evaluationStatus, setEvaluationStatus] = useState('') // 'success', 'error', 'loading' or ''
     const [isLoading, setIsLoading] = useState(false)
 
     // Orquesta-specific settings
     const [taskStatusOverride, setTaskStatus] = useState('succeeded') // 'succeeded' or 'failed'
-    const [resultData, setResultData] = useState('')
+    const [resultData, setResultData, setResultDataImmediate] = useSessionState('orquestulator_result_data', '')
 
     // StackStorm-specific states
-    const [st2Url, setSt2Url] = useState('http://localhost:9101')
-    const [st2ApiKey, setSt2ApiKey] = useState('')
     const [st2ExecutionId, setSt2ExecutionId] = useState('')
     const [st2Loading, setSt2Loading] = useState(false)
 
-    // Helper function to save data to session
-    const saveToSession = async (key, value) => {
-        await backendClient.saveSessionData(key, value)
+    // StackStorm connection state
+    const [st2AvailableConnections, setSt2AvailableConnections] = useState([])
+    const [st2CurrentConnection, setSt2CurrentConnection] = useState(null)
+
+    // StackStorm connection status for status indicator
+    const [st2ConnectionStatus, setSt2ConnectionStatus] = useState('') // 'success', 'error', 'loading' or ''
+
+    // StackStorm alert for error messages
+    const [st2Alert, setSt2Alert] = useState('') // Error message for StackStorm panel
+
+    // Temporary state for custom connection form (never cached)
+    const [st2CustomUrl, setSt2CustomUrl] = useState('')
+    const [st2CustomApiKey, setSt2CustomApiKey] = useState('')
+
+    // Load StackStorm connections and current session state
+    const loadStackStormConnections = async () => {
+        setSt2ConnectionStatus('loading')
+
+        try {
+            const connectionData = await backendClient.getStackStormConnections()
+            if (connectionData) {
+                setSt2AvailableConnections(connectionData.connections || [])
+                setSt2CurrentConnection(connectionData.current || connectionData.default)
+
+                // Reset status when loading connections - don't assume connection works
+                setSt2ConnectionStatus('')
+
+                // If current connection is custom, populate the form with existing data
+                if (connectionData.current === 'custom' && connectionData.custom_connection) {
+                    setSt2CustomUrl(connectionData.custom_connection.url || '')
+                    setSt2CustomApiKey(connectionData.custom_connection.api_key || '')
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load StackStorm connections:', error)
+            setSt2ConnectionStatus('error')
+        }
     }
 
-    // Save StackStorm API key when it changes
-    const handleSt2ApiKeyChange = (newApiKey) => {
-        setSt2ApiKey(newApiKey)
-        if (newApiKey.trim()) {
-            saveToSession('st2_api_key', newApiKey)
+    // Load cached values on component mount
+    useEffect(() => {
+        // Session state variables now load automatically via useSessionState hook
+        // Only need to load StackStorm connections from backend session
+        loadStackStormConnections()
+    }, [])
+
+    // Handle StackStorm connection selection change
+    const handleConnectionChange = async (connectionId) => {
+        // Clear any previous alert when changing connections
+        setSt2Alert('')
+
+        // For non-custom connections, update immediately
+        if (connectionId !== 'custom') {
+            setSt2CurrentConnection(connectionId)
+            setSt2ConnectionStatus('loading')
+
+            try {
+                await backendClient.setStackStormConnection(connectionId, null)
+                setSt2ConnectionStatus('') // Reset to ready state, not "success"
+            } catch (error) {
+                console.error('Failed to update StackStorm connection:', error)
+                setSt2ConnectionStatus('error')
+                setSt2Alert(`Failed to update connection: ${error.message}`)
+                await loadStackStormConnections()
+            }
+        } else {
+            // For custom connections, just update the UI state - don't submit yet
+            setSt2CurrentConnection(connectionId)
+            setSt2ConnectionStatus('') // Reset status for custom until they set it
+        }
+    }
+
+    // Helper function to ensure connection is set before StackStorm operations
+    const ensureStackStormConnectionSet = async () => {
+        if (!st2CurrentConnection) {
+            setSt2Alert('Please select a connection first')
+            return false
+        }
+
+        // For custom connections, ensure the connection is set first
+        if (st2CurrentConnection === 'custom') {
+            if (!st2CustomUrl.trim()) {
+                setSt2Alert('StackStorm URL is required for custom connection')
+                return false
+            }
+            try {
+                // Update the backend session with current custom connection values
+                await backendClient.setStackStormConnection('custom', {
+                    url: st2CustomUrl.trim(),
+                    api_key: st2CustomApiKey.trim() || null
+                })
+                return true
+            } catch (error) {
+                setSt2Alert(`Failed to update custom connection: ${error.message}`)
+                return false
+            }
+        }
+
+        return true // Non-custom connections are already set
+    }
+
+    // Handle testing the current StackStorm connection
+    const handleTestConnection = async () => {
+        // Clear any previous alert
+        setSt2Alert('')
+
+        // Ensure connection is set before testing
+        const connectionReady = await ensureStackStormConnectionSet()
+        if (!connectionReady) {
+            return
+        }
+
+        setSt2ConnectionStatus('loading')
+
+        try {
+            const testResult = await backendClient.testStackStormConnection()
+
+            if (testResult && testResult.success) {
+                setSt2ConnectionStatus('success')
+                // Don't set an alert for successful connection test - let the status indicator show success
+            } else {
+                setSt2ConnectionStatus('error')
+                setSt2Alert(`Connection test failed: ${testResult?.message || 'Unknown error'}`)
+            }
+        } catch (error) {
+            console.error('Failed to test StackStorm connection:', error)
+            setSt2ConnectionStatus('error')
+            setSt2Alert(`Connection test failed: ${error.message}`)
+        }
+    }
+
+    // Handle fetching the latest execution ID
+    const handleGetLatestExecution = async () => {
+        // Clear any previous alert
+        setSt2Alert('')
+
+        // Ensure connection is set before fetching executions
+        const connectionReady = await ensureStackStormConnectionSet()
+        if (!connectionReady) {
+            return
+        }
+
+        setSt2Loading(true)
+
+        try {
+            const executionsResult = await backendClient.getStackStormExecutions()
+
+            if (executionsResult && executionsResult.executions && executionsResult.executions.length > 0) {
+                // Get the most recent execution (should be first in the list)
+                const latestExecution = executionsResult.executions[0]
+                setSt2ExecutionId(latestExecution.id)
+                setSt2ConnectionStatus('success') // Set status to success, no alert needed
+            } else {
+                setSt2ConnectionStatus('error')
+                setSt2Alert('No executions found')
+            }
+        } catch (error) {
+            console.error('Failed to get latest execution:', error)
+            setSt2ConnectionStatus('error')
+            setSt2Alert(`Failed to get latest execution: ${error.message}`)
+        } finally {
+            setSt2Loading(false)
         }
     }
 
@@ -54,9 +206,15 @@ function MainPage({ onSessionExpired }) {
     }
 
     const formatData = (data, format) => {
-        return format === 'json'
-            ? JSON.stringify(data, null, 2)
-            : yaml.dump(data, { indent: 2 })
+        if (format === 'json') {
+            return JSON.stringify(data, null, 2)
+        } else {
+            // For YAML format, handle primitives as strings to avoid YAML formatting quirks
+            if (typeof data === 'string' || typeof data === 'number' || typeof data === 'boolean') {
+                return String(data)
+            }
+            return yaml.dump(data, { indent: 2 })
+        }
     }
 
     const handleDataFormatting = (newFormat) => {
@@ -69,7 +227,7 @@ function MainPage({ onSessionExpired }) {
                 // Batch state updates to avoid multiple re-renders
                 const formattedData = formatData(parsedData, newFormat)
 
-                setContextData(formattedData)
+                setContextDataImmediate(formattedData)
             } catch (error) {
                 // TODO: Show error in evaluation
                 console.error('Data conversion error:', error)
@@ -83,14 +241,27 @@ function MainPage({ onSessionExpired }) {
 
                 const formattedData = formatData(parsedData, newFormat)
 
-                setResultData(formattedData)
+                setResultDataImmediate(formattedData)
             } catch (error) {
                 // TODO: Show error in evaluation
                 console.error('Result conversion error:', error)
             }
         }
 
-        setDataFormat(newFormat)
+        // Also convert evaluation result if it exists
+        if (evaluation.trim()) {
+            try {
+                const parsedData = validateAndParseData(evaluation)
+                const formattedData = formatData(parsedData, newFormat)
+                setEvaluationImmediate(formattedData)
+            } catch (error) {
+                // Don't reformat evaluation if it's not valid structured data (e.g., error messages, plain text)
+                console.warn('Evaluation data not reformattable - likely a plain text message:', error.message)
+                // Keep the evaluation as-is if it can't be parsed as structured data
+            }
+        }
+
+        setDataFormatImmediate(newFormat)
     }
 
     const copyToClipboard = async (text) => {
@@ -107,17 +278,19 @@ function MainPage({ onSessionExpired }) {
     const evaluateExpression = async () => {
         // Input validation
         if (!query.trim()) {
-            setEvaluation('Error: Query cannot be empty')
+            const errorMsg = 'Error: Query cannot be empty'
+            setEvaluationImmediate(errorMsg)
             setEvaluationStatus('error')
             return
         }
 
         let parsedContextData = {}
-        if (resultData) {
+        if (contextData.trim()) {
             try {
                 parsedContextData = validateAndParseData(contextData)
             } catch (e) {
-                setEvaluation(`${queryType === 'orquesta' ? 'Context' : 'Data'} Parse Error: ${e.message}`)
+                const errorMsg = `${queryType === 'orquesta' ? 'Context' : 'Data'} Parse Error: ${e.message}`
+                setEvaluationImmediate(errorMsg)
                 setEvaluationStatus('error')
                 return
             }
@@ -128,7 +301,8 @@ function MainPage({ onSessionExpired }) {
             try {
                 parsedResultData = validateAndParseData(resultData)
             } catch (e) {
-                setEvaluation(`Task Result Parse Error: ${e.message}`)
+                const errorMsg = `Task Result Parse Error: ${e.message}`
+                setEvaluationImmediate(errorMsg)
                 setEvaluationStatus('error')
                 return
             }
@@ -163,17 +337,29 @@ function MainPage({ onSessionExpired }) {
 
             if (responseData) {
                 // Format result according to current dataFormat
-                // TODO: This might fail if the result is a primitive (string, number, boolean)
-                const formattedResult = formatData(responseData.result, dataFormat)
-
-                setEvaluation(formattedResult)
-                setEvaluationStatus('success')
+                try {
+                    const formattedResult = formatData(responseData.result, dataFormat)
+                    setEvaluationImmediate(formattedResult)
+                    setEvaluationStatus('success')
+                } catch (formatError) {
+                    console.error('Format error:', formatError)
+                    // Fallback: display the raw result
+                    const fallbackResult = String(responseData.result)
+                    setEvaluationImmediate(fallbackResult)
+                    setEvaluationStatus('success')
+                }
+            } else {
+                console.error('No response data received')
+                setEvaluationImmediate('Error: No response data received')
+                setEvaluationStatus('error')
             }
         } catch (error) {
-            setEvaluation(`Error: ${error.message}`)
+            const errorMessage = `Error: ${error.message}`
+            setEvaluationImmediate(errorMessage)
             setEvaluationStatus('error')
+        } finally {
+            setIsLoading(false)
         }
-        setIsLoading(false)
     }
 
     const handleMonacoKeyDown = (e, monaco) => {
@@ -184,50 +370,44 @@ function MainPage({ onSessionExpired }) {
     }
 
     const fetchStackStormResult = async () => {
-        if (!st2Url || !st2ExecutionId || !st2ApiKey) {
-            setEvaluation('Error: StackStorm URL, Execution ID, and API Key are required')
-            setEvaluationStatus('error')
+        // Clear any previous alert
+        setSt2Alert('')
+
+        if (!st2ExecutionId) {
+            setSt2Alert('Please provide an execution ID')
             return
         }
 
-        // Basic URL validation
-        try {
-            new URL(st2Url)
-        } catch {
-            setEvaluation('Error: Invalid StackStorm URL format')
-            setEvaluationStatus('error')
+        // Ensure connection is set before fetching execution data
+        const connectionReady = await ensureStackStormConnectionSet()
+        if (!connectionReady) {
             return
         }
 
         setSt2Loading(true)
         try {
-            const responseData = await backendClient.fetchStackStormExecution(
-                st2ExecutionId,
-                st2Url,
-                st2ApiKey
-            )
+            const responseData = await backendClient.getStackStormExecution(st2ExecutionId)
 
             if (responseData) {
                 const executionData = responseData.execution_data
 
                 // Validate that we received execution data
                 if (!executionData || !executionData.id) {
-                    setEvaluation('Error: Invalid execution data received from StackStorm')
-                    setEvaluationStatus('error')
+                    setSt2Alert('Invalid execution data received from StackStorm')
+                    setSt2Loading(false)
                     return
                 }
 
                 // Set the execution data to the task result field instead of context field
                 // Format the data according to the current task result format
                 const formattedData = formatData(executionData, dataFormat)
-                setResultData(formattedData)
-                setEvaluation(responseData.message)
+                setResultDataImmediate(formattedData)
+                setEvaluationImmediate(responseData.message)
                 setEvaluationStatus('success')
             }
         } catch (error) {
             const errorMessage = backendClient.formatNetworkError(error)
-            setEvaluation(errorMessage)
-            setEvaluationStatus('error')
+            setSt2Alert(errorMessage)
         } finally {
             setSt2Loading(false)
         }
@@ -246,19 +426,25 @@ function MainPage({ onSessionExpired }) {
                         <div className="pane-actions">
                             <div className="btn-group">
                                 <button
-                                    onClick={() => setQueryType('orquesta')}
+                                    onClick={() => {
+                                        setQueryTypeImmediate('orquesta')
+                                    }}
                                     className={`btn btn--secondary${queryType === 'orquesta' ? ' active' : ''}`}
                                 >
                                     orquesta
                                 </button>
                                 <button
-                                    onClick={() => setQueryType('yaql')}
+                                    onClick={() => {
+                                        setQueryTypeImmediate('yaql')
+                                    }}
                                     className={`btn btn--secondary${queryType === 'yaql' ? ' active' : ''}`}
                                 >
                                     yaql
                                 </button>
                                 <button
-                                    onClick={() => setQueryType('jinja2')}
+                                    onClick={() => {
+                                        setQueryTypeImmediate('jinja2')
+                                    }}
                                     className={`btn btn--secondary${queryType === 'jinja2' ? ' active' : ''}`}
                                 >
                                     jinja2
@@ -280,7 +466,9 @@ function MainPage({ onSessionExpired }) {
                             </div>
                             <button
                                 className="btn btn--secondary"
-                                onClick={() => setQuery('')}
+                                onClick={() => {
+                                    setQueryImmediate('')
+                                }}
                                 title="Clear Query"
                                 disabled={!query}
                             >
@@ -300,7 +488,10 @@ function MainPage({ onSessionExpired }) {
                         height="80px"
                         language='plaintext'
                         value={query}
-                        onChange={(value) => setQuery(value || '')}
+                        onChange={(value) => {
+                            const newQuery = value || ''
+                            setQuery(newQuery)
+                        }}
                         options={{
                             placeholder: `${queryType === "orquesta" ? "<% ctx() %>" : "Enter your query here..."}`
                         }}
@@ -309,7 +500,7 @@ function MainPage({ onSessionExpired }) {
                     //   editor.onKeyDown((e) => handleMonacoKeyDown(e, monaco))
                     // }}
                     />
-                    < div className="keyboard-hint" >
+                    < div className="hint" >
                         ctrl + enter to eval
                     </div>
                 </div>
@@ -324,7 +515,9 @@ function MainPage({ onSessionExpired }) {
                         <div className="pane-actions">
                             <button
                                 className="btn btn--secondary"
-                                onClick={() => setContextData('')}
+                                onClick={() => {
+                                    setContextDataImmediate('')
+                                }}
                                 title={queryType === 'orquesta' ? "Clear context" : "Clear data"}
                                 disabled={!contextData}
                             >
@@ -350,12 +543,18 @@ function MainPage({ onSessionExpired }) {
                     <OrquestulatorEditor
                         language={dataFormat}
                         value={contextData}
-                        onChange={(value) => setContextData(value || '')}
+                        onChange={(value) => {
+                            const newContextData = value || ''
+                            setContextData(newContextData)
+                        }}
                     // onMount={(editor, monaco) => {
                     //   // Handle Ctrl+Enter shortcut
                     //   editor.onKeyDown((e) => handleMonacoKeyDown(e, monaco))
                     // }}
                     />
+                    <div className="hint">
+                        avoid sensitive data - stored in session
+                    </div>
                 </div>
                 {/* Evaluation Pane - Right Side */}
                 <div className="pane">
@@ -376,7 +575,7 @@ function MainPage({ onSessionExpired }) {
                             <button
                                 className="btn btn--secondary"
                                 onClick={() => {
-                                    setEvaluation('')
+                                    setEvaluationImmediate('')
                                     setEvaluationStatus('')
                                 }}
                                 title="Clear result"
@@ -422,7 +621,9 @@ function MainPage({ onSessionExpired }) {
                         <div className="pane-actions">
                             <button
                                 className="btn btn--secondary"
-                                onClick={() => setResultData('')}
+                                onClick={() => {
+                                    setResultDataImmediate('')
+                                }}
                                 title="Clear result"
                                 disabled={!resultData}
                             >
@@ -449,12 +650,18 @@ function MainPage({ onSessionExpired }) {
                     <OrquestulatorEditor
                         language={dataFormat}
                         value={resultData}
-                        onChange={(value) => setResultData(value || '')}
+                        onChange={(value) => {
+                            const newResultData = value || ''
+                            setResultData(newResultData)
+                        }}
                     // onMount={(editor, monaco) => {
                     //   // Handle Ctrl+Enter shortcut
                     //   editor.onKeyDown((e) => handleMonacoKeyDown(e, monaco))
                     // }}
                     />
+                    <div className="hint">
+                        avoid sensitive data - stored in session
+                    </div>
                 </div>
                 {/* StackStorm Integration Panel */}
                 <div className={`pane pane-bottom ${queryType !== 'orquesta' ? 'hidden' : ''}`}>
@@ -464,45 +671,103 @@ function MainPage({ onSessionExpired }) {
                             StackStorm
                         </h3>
                         <div className="pane-actions">
-                            <button
-                                className="btn btn--primary"
-                                onClick={fetchStackStormResult}
-                                disabled={st2Loading || !st2Url || !st2ExecutionId || !st2ApiKey}
-                            >
-                                fetch result
-                            </button>
+                            <div className={`status-indicator ${st2ConnectionStatus === 'loading' ? 'loading' : st2ConnectionStatus}`}>
+                                {
+                                    st2ConnectionStatus === 'loading' ? '• Connecting...' :
+                                        st2ConnectionStatus === 'success' ? '✓ Connected' :
+                                            st2ConnectionStatus === 'error' ? '✗ Error' :
+                                                st2CurrentConnection ? '• Ready' : '• No Connection'
+                                }
+                            </div>
                         </div>
                     </div>
                     <div className="inputs-vertical">
+                        {st2Alert && (
+                            <div className="alert error">
+                                {st2Alert}
+                            </div>
+                        )}
                         <div className="control-group">
-                            <label>StackStorm URL:</label>
-                            <input
-                                type="text"
-                                value={st2Url}
-                                onChange={(e) => setSt2Url(e.target.value)}
-                                placeholder="http://localhost:9101"
-                                className="input"
-                            />
+                            <label>Connection:</label>
+                            <div className="control-group control-group-inline">
+                                <select
+                                    value={st2CurrentConnection || ''}
+                                    onChange={(e) => handleConnectionChange(e.target.value)}
+                                    disabled={st2ConnectionStatus === 'loading'}
+                                    className="input input--flex-fill"
+                                >
+                                    <option value="" disabled>Select a connection...</option>
+                                    {st2AvailableConnections.map(conn => (
+                                        <option key={conn.id} value={conn.id}>
+                                            {conn.alias}
+                                        </option>
+                                    ))}
+                                    <option value="custom">Custom</option>
+                                </select>
+                                <button
+                                    className="btn btn--secondary"
+                                    onClick={handleTestConnection}
+                                    disabled={st2ConnectionStatus === 'loading' || !st2CurrentConnection}
+                                    title="Test the current connection"
+                                >
+                                    Test Connection
+                                </button>
+                            </div>
                         </div>
-                        <div className="control-group">
-                            <label>API Key:</label>
-                            <input
-                                type="password"
-                                value={st2ApiKey}
-                                onChange={(e) => handleSt2ApiKeyChange(e.target.value)}
-                                placeholder="Optional API key"
-                                className="input"
-                            />
-                        </div>
+
+                        {/* Show URL and API Key inputs only for custom connection */}
+                        {st2CurrentConnection === 'custom' && (
+                            <>
+                                <div className="control-group">
+                                    <label>StackStorm URL:</label>
+                                    <input
+                                        type="text"
+                                        value={st2CustomUrl}
+                                        onChange={(e) => setSt2CustomUrl(e.target.value)}
+                                        placeholder="http://localhost:9101"
+                                        className="input"
+                                    />
+                                </div>
+                                <div className="control-group">
+                                    <label>API Key:</label>
+                                    <input
+                                        type="password"
+                                        value={st2CustomApiKey}
+                                        onChange={(e) => setSt2CustomApiKey(e.target.value)}
+                                        placeholder="Optional API key"
+                                        className="input"
+                                    />
+                                </div>
+                            </>
+                        )}
+
                         <div className="control-group">
                             <label>Execution ID:</label>
-                            <input
-                                type="text"
-                                value={st2ExecutionId}
-                                onChange={(e) => setSt2ExecutionId(e.target.value)}
-                                placeholder="5f2b6c8d9e1a2b3c4d5e6f7g"
-                                className="input"
-                            />
+                            <div className="control-group control-group-inline">
+                                <input
+                                    type="text"
+                                    value={st2ExecutionId}
+                                    onChange={(e) => setSt2ExecutionId(e.target.value)}
+                                    placeholder="5f2b6c8d9e1a2b3c4d5e6f7g"
+                                    className="input input--flex-fill"
+                                />
+                                <button
+                                    className="btn btn--secondary"
+                                    onClick={handleGetLatestExecution}
+                                    disabled={st2Loading || st2ConnectionStatus === 'loading' || !st2CurrentConnection}
+                                    title="Get the latest execution ID"
+                                >
+                                    Latest
+                                </button>
+                                <button
+                                    className="btn btn--primary"
+                                    onClick={fetchStackStormResult}
+                                    disabled={st2Loading || st2ConnectionStatus === 'loading' || !st2CurrentConnection || !st2ExecutionId}
+                                    title="Fetch execution result data"
+                                >
+                                    Result
+                                </button>
+                            </div>
                         </div>
                         <div className="control-group control-group-inline">
                             <label>Task Status Override:</label>
@@ -527,12 +792,13 @@ function MainPage({ onSessionExpired }) {
 
             {/* Footer */}
             <div className="footer">
-                <div className="keyboard-hint">
+                <div className="hint">
                     Inspired by orquestaevaluator by Daren Lord
                 </div>
             </div>
         </>
     )
+
 }
 
 export default MainPage

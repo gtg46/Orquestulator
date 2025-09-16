@@ -4,7 +4,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     ports:
-      - "8000:8000"
+      - "7618:7618"
     environment:
       - PYTHONPATH=/app
     networks:

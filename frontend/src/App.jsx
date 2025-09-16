@@ -57,7 +57,7 @@ function App() {
     }
   }
 
-  const handleAuthSuccess = (data) => {
+  const handleAuthSuccess = () => {
     setIsAuthenticated(true)
     setAuthError('')
   }
@@ -83,7 +83,7 @@ function App() {
     <div className="app">
       <Header />
       {isAuthenticated ? (
-        <MainPage onSessionExpired={handleSessionExpired} />
+        <MainPage />
       ) : passphraseRequired ? (
         <PassPhrase
           onAuthSuccess={handleAuthSuccess}

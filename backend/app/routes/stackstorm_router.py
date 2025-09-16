@@ -232,7 +232,7 @@ async def get_executions(session_id: str = Depends(require_valid_session)):
 
         # Make API request to list executions
         base_url = stackstorm_config["url"].rstrip("/")
-        executions_url = f"{base_url}/v1/executions?limit=50"  # Get last 50 executions
+        executions_url = f"{base_url}/v1/executions?limit=50&show_secrets=false"  # Get last 50 executions, no secrets
 
         headers = {"Content-Type": "application/json"}
         if stackstorm_config["api_key"]:
@@ -279,7 +279,7 @@ async def get_execution(
 
         # Make the API request
         base_url = stackstorm_config["url"].rstrip("/")
-        execution_url = f"{base_url}/v1/executions/{execution_id}"
+        execution_url = f"{base_url}/v1/executions/{execution_id}?show_secrets=false"
 
         headers = {"Content-Type": "application/json"}
         if stackstorm_config["api_key"]:

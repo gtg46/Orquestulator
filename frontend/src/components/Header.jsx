@@ -7,7 +7,7 @@ function Header() {
                 </span>
                 Orquestulator
             </h1>
-            <p>Expression evaluator for Orquesta, YAQL, and Jinja2</p>
+            <p>Query evaluation tool for Orquesta, YAQL, and Jinja2</p>
         </header>
     )
 }

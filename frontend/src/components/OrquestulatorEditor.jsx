@@ -36,8 +36,9 @@ const OrquestulatorEditor = (props) => {
         folding: false,
         lineNumbers: 'off',
         lineDecorationsWidth: 10,
-        stickyScroll: { enabled: false },
         padding: { top: 10, bottom: 10 },
+        stickyScroll: { enabled: false },
+        scrollbar: { alwaysConsumeMouseWheel: false }
     };
 
     // Extract options and other props without mutating the original props

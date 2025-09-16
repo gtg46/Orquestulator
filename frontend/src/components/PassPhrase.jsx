@@ -44,7 +44,7 @@ function PassPhrase({ onAuthSuccess, authError }) {
     return (
         <div className="passphrase-container">
             {(error) && (
-                <div className="alert error">
+                <div className="alert alert--spaced error">
                     {error}
                 </div>
             )}
