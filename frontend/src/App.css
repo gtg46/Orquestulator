@@ -127,21 +127,34 @@
   width: 90%;
   max-width: 1400px;
   margin: 0 auto;
+  min-height: fit-content;
+}
+
+/* Default layout for orquesta mode with 3 rows */
+.panes-container.orquesta-mode {
+  grid-template-rows: auto 1fr auto;
   min-height: calc(100vh - 89px);
 }
 
-.wide-pane {
-  grid-column: 1 / -1;
+/* Compact layout for yaql/jinja2 modes with only 2 rows */
+.panes-container.compact-mode {
+  grid-template-rows: auto 1fr;
+  min-height: fit-content;
 }
+
 
 .pane {
   display: flex;
   flex-direction: column;
   background-color: var(--bg-secondary);
-  padding: var(--spacing-lg) var(--spacing-lg) 4px var(--spacing-lg);
+  padding: var(--spacing-lg);
   overflow: hidden;
   border-right: var(--border-default);
   border-bottom: var(--border-default);
+}
+
+.wide-pane {
+  grid-column: 1 / -1;
 }
 
 /* Add left border to panes in the left column only */
@@ -344,7 +357,13 @@
 }
 
 @media (max-width: 1200px) {
-  .panes-container {
+  .panes-container.orquesta-mode {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto 1fr auto;
+    width: 95%;
+  }
+
+  .panes-container.compact-mode {
     grid-template-columns: 1fr 1fr;
     grid-template-rows: auto 1fr;
     width: 95%;
@@ -366,7 +385,13 @@
 }
 
 @media (max-width: 768px) {
-  .panes-container {
+  .panes-container.orquesta-mode {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto 1fr auto;
+    width: 98%;
+  }
+
+  .panes-container.compact-mode {
     grid-template-columns: 1fr;
     grid-template-rows: auto auto 1fr;
     width: 98%;

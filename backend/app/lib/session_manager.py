@@ -41,7 +41,9 @@ class SessionManager:
 
         return session_id
 
-    def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+    def get_session(
+        self, session_id: str, update_activity: bool = True
+    ) -> Optional[Dict[str, Any]]:
         """Get all data from session"""
         # Progressive cleanup of expired sessions
         if self.proactive_cleanup:
@@ -52,7 +54,8 @@ class SessionManager:
         if not session:
             return None
 
-        self.update_activity(session_id)
+        if update_activity:
+            self.update_activity(session_id)
 
         return session
 

@@ -15,6 +15,7 @@ class AuthStatusResponse(BaseModel):
     authenticated: bool
     passphrase_required: bool
     last_activity: Optional[str] = None
+    session_timeout_hours: Optional[int] = None
 
 
 class SessionDataRequest(BaseModel):

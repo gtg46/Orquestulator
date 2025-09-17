@@ -23,25 +23,25 @@ def _get_stackstorm_config_from_session(session_id: str) -> dict:
     Returns the connection config as a dictionary with 'url' and 'api_key'.
     """
     session_data = session_manager.get_session_data(session_id)
-    current_connection = None
+    current_connection = (
+        session_data.get("st2_current_connection") if session_data else None
+    )
 
-    # Try to get user's configured connection
-    if session_data and session_data.get("stackstorm_connection"):
-        stackstorm_connection = session_data["stackstorm_connection"]
-        current_connection = stackstorm_connection.get("current")
-
-        # If user has a custom connection configured
-        if current_connection == "custom":
-            custom_connection = stackstorm_connection.get("custom_connection")
-            if not custom_connection:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Custom connection selected but no custom connection data found.",
-                )
-            return {
-                "url": custom_connection.get("url"),
-                "api_key": custom_connection.get("api_key"),
-            }
+    # If user has a custom connection configured
+    if current_connection == "custom":
+        custom_url = session_data.get("st2_custom_url") if session_data else None
+        custom_api_key = (
+            session_data.get("st2_custom_api_key") if session_data else None
+        )
+        if not custom_url:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Custom connection selected but no custom URL found.",
+            )
+        return {
+            "url": custom_url,
+            "api_key": custom_api_key,
+        }
 
     # If no connection configured, fall back to default
     if not current_connection:
@@ -86,15 +86,19 @@ async def get_connection(session_id: str = Depends(require_valid_session)):
                 )
             )
 
-        # Get user's current connection config from session
+        # Get user's current connection config from session (simple key-value format)
         session_data = session_manager.get_session_data(session_id)
-        current_connection = None
-        custom_connection = None
+        current_connection = (
+            session_data.get("st2_current_connection") if session_data else None
+        )
 
-        if session_data and session_data.get("stackstorm_connection"):
-            stackstorm_connection = session_data["stackstorm_connection"]
-            current_connection = stackstorm_connection.get("current")
-            custom_connection = stackstorm_connection.get("custom_connection")
+        # Build custom connection data if it exists
+        custom_connection = None
+        if session_data and session_data.get("st2_custom_url"):
+            custom_connection = {
+                "url": session_data.get("st2_custom_url"),
+                "api_key": session_data.get("st2_custom_api_key"),
+            }
 
         return ConnectionResponse(
             connections=connection_list,
@@ -116,7 +120,7 @@ async def set_connection(
     session_id: str = Depends(require_valid_session),
 ):
     """
-    Set the user's StackStorm connection configuration
+    Set the user's StackStorm connection configuration using simple key-value storage
     """
     try:
         # Validate the connection request
@@ -142,20 +146,23 @@ async def set_connection(
                     detail=f"Connection '{connection_request.current}' not found in preconfigured connections",
                 )
 
-        # Build session data
-        stackstorm_connection_data = {
-            "current": connection_request.current,
-            "custom_connection": None,
+        # Build session data using simple key-value pairs
+        session_data = {
+            "st2_current_connection": connection_request.current,
         }
 
+        # Add custom connection data if provided
         if connection_request.custom_connection:
-            stackstorm_connection_data["custom_connection"] = {
-                "url": connection_request.custom_connection.url,
-                "api_key": connection_request.custom_connection.api_key,
-            }
+            session_data["st2_custom_url"] = connection_request.custom_connection.url
+            session_data["st2_custom_api_key"] = (
+                connection_request.custom_connection.api_key
+            )
+        else:
+            # Clear custom connection data when switching to predefined connection
+            session_data["st2_custom_url"] = None
+            session_data["st2_custom_api_key"] = None
 
         # Update session
-        session_data = {"stackstorm_connection": stackstorm_connection_data}
         success = session_manager.set_session_data(session_id, session_data)
 
         if not success:

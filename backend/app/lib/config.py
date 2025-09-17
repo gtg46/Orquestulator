@@ -24,7 +24,7 @@ class Config:
         self.PASSPHRASE = os.getenv("PASSPHRASE", "Ch@ngeMe")
 
         # Session Management
-        self.SESSION_TIMEOUT_HOURS = int(os.getenv("SESSION_TIMEOUT_HOURS", "2"))
+        self.SESSION_TIMEOUT_HOURS = int(os.getenv("SESSION_TIMEOUT_HOURS", "4"))
         self.SESSION_COOKIE_NAME = os.getenv("SESSION_COOKIE_NAME", "session_id")
         self.SESSION_COOKIE_SECURE = (
             os.getenv("SESSION_COOKIE_SECURE", "false").lower() == "true"

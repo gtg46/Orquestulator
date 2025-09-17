@@ -58,7 +58,7 @@ async def get_auth_status(request: Request):
             authenticated=False, passphrase_required=config.PASSPHRASE_AUTH
         )
 
-    session = session_manager.get_session(session_id)
+    session = session_manager.get_session(session_id, update_activity=False)
     if not session:
         return AuthStatusResponse(
             authenticated=False, passphrase_required=config.PASSPHRASE_AUTH
@@ -68,6 +68,7 @@ async def get_auth_status(request: Request):
         authenticated=True,
         passphrase_required=config.PASSPHRASE_AUTH,
         last_activity=session["last_activity"].isoformat(),
+        session_timeout_hours=config.SESSION_TIMEOUT_HOURS,
     )
 
 

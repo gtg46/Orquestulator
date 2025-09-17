@@ -7,6 +7,8 @@ class BackendClient {
   constructor() {
     this.baseURL = import.meta.env.VITE_BACKEND_URL
     this.onSessionExpired = null
+    this.sessionCheckInterval = null
+    this.isCheckingSession = false
   }
 
   /**
@@ -14,6 +16,48 @@ class BackendClient {
    */
   setSessionExpiredCallback(callback) {
     this.onSessionExpired = callback
+  }
+
+  /**
+   * Start periodic session validation
+   */
+  startSessionHeartbeat(intervalMs = 60000) { // Check every minute by default
+    if (this.sessionCheckInterval) {
+      clearInterval(this.sessionCheckInterval)
+    }
+
+    this.sessionCheckInterval = setInterval(async () => {
+      if (this.isCheckingSession) return // Prevent overlapping checks
+
+      this.isCheckingSession = true
+      try {
+        await this.checkAuthStatus()
+      } catch (error) {
+        // Session check failed - this will trigger the session expired callback
+        console.debug('Session heartbeat check failed:', error.message)
+      } finally {
+        this.isCheckingSession = false
+      }
+    }, intervalMs)
+  }
+
+  /**
+   * Stop periodic session validation
+   */
+  stopSessionHeartbeat() {
+    if (this.sessionCheckInterval) {
+      clearInterval(this.sessionCheckInterval)
+      this.sessionCheckInterval = null
+    }
+  }
+
+  /**
+   * Clear all session-related data (for session expiration)
+   */
+  clearSessionState() {
+    // This will be called when session expires
+    // Individual useSessionState hooks should handle their own cleanup
+    console.debug('Session state cleared due to expiration')
   }
 
   /**
@@ -57,9 +101,9 @@ class BackendClient {
       method: 'POST',
       body: JSON.stringify(body)
     })
-    
+
     if (!response) return null
-    
+
     if (response.ok) {
       return await response.json()
     } else {
@@ -70,9 +114,9 @@ class BackendClient {
 
   async checkAuthStatus() {
     const response = await this.makeRequest('/api/session/status')
-    
+
     if (!response) return null
-    
+
     if (response.ok) {
       return await response.json()
     } else {
@@ -84,24 +128,26 @@ class BackendClient {
     try {
       const response = await this.makeRequest('/api/session/data', {
         method: 'POST',
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           data: { [key]: value }
         })
       })
 
       if (response && !response.ok) {
-        console.warn('Failed to save session data:', response.statusText)
+        const errorData = await response.json()
+        throw new Error(errorData.detail || 'Failed to save session data')
       }
     } catch (error) {
-      console.warn('Failed to save session data:', error)
+      // Re-throw with consistent error format
+      throw new Error(`Session save failed: ${error.message}`)
     }
   }
 
   async getSessionData() {
     const response = await this.makeRequest('/api/session/data')
-    
+
     if (!response) return null
-    
+
     if (response.ok) {
       return await response.json()
     } else {
@@ -135,7 +181,7 @@ class BackendClient {
   /**
    * StackStorm Integration
    */
-  
+
   /**
    * Get available StackStorm connections and current configuration
    * @returns {Promise<Object>} ConnectionResponse with connections, default, current, and custom_connection

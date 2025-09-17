@@ -6,11 +6,11 @@ import { useSessionState } from '../hooks/useSessionState'
 
 function MainPage() {
 
-    const [dataFormat, setDataFormat, setDataFormatImmediate] = useSessionState('orquestulator_data_format', 'yaml')
-    const [queryType, setQueryType, setQueryTypeImmediate] = useSessionState('orquestulator_query_type', 'orquesta')
+    const [dataFormat, _setDataFormat, setDataFormatImmediate] = useSessionState('orquestulator_data_format', 'yaml')
+    const [queryType, _setQueryType, setQueryTypeImmediate] = useSessionState('orquestulator_query_type', 'orquesta')
     const [query, setQuery, setQueryImmediate] = useSessionState('orquestulator_query', '')
     const [contextData, setContextData, setContextDataImmediate] = useSessionState('orquestulator_context_data', '')
-    const [evaluation, setEvaluation, setEvaluationImmediate] = useSessionState('orquestulator_evaluation', '')
+    const [evaluation, _setEvaluation, setEvaluationImmediate] = useSessionState('orquestulator_evaluation', '')
     const [evaluationStatus, setEvaluationStatus] = useState('') // 'success', 'error', 'loading' or ''
     const [isLoading, setIsLoading] = useState(false)
 
@@ -18,13 +18,13 @@ function MainPage() {
     const [taskStatusOverride, setTaskStatus] = useState('succeeded') // 'succeeded' or 'failed'
     const [resultData, setResultData, setResultDataImmediate] = useSessionState('orquestulator_result_data', '')
 
-    // StackStorm-specific states
-    const [st2ExecutionId, setSt2ExecutionId] = useState('')
+    // StackStorm-specific states - now persisted
+    const [st2ExecutionId, setSt2ExecutionId, _setSt2ExecutionIdImmediate] = useSessionState('st2_execution_id', '')
     const [st2Loading, setSt2Loading] = useState(false)
 
-    // StackStorm connection state
+    // StackStorm connection state - now persisted
     const [st2AvailableConnections, setSt2AvailableConnections] = useState([])
-    const [st2CurrentConnection, setSt2CurrentConnection] = useState(null)
+    const [st2CurrentConnection, _setSt2CurrentConnection, setSt2CurrentConnectionImmediate] = useSessionState('st2_current_connection', null)
 
     // StackStorm connection status for status indicator
     const [st2ConnectionStatus, setSt2ConnectionStatus] = useState('') // 'success', 'error', 'loading' or ''
@@ -32,9 +32,9 @@ function MainPage() {
     // StackStorm alert for error messages
     const [st2Alert, setSt2Alert] = useState('') // Error message for StackStorm panel
 
-    // Temporary state for custom connection form (never cached)
-    const [st2CustomUrl, setSt2CustomUrl] = useState('')
-    const [st2CustomApiKey, setSt2CustomApiKey] = useState('')
+    // Custom connection form (now persisted)
+    const [st2CustomUrl, setSt2CustomUrl, setSt2CustomUrlImmediate] = useSessionState('st2_custom_url', '')
+    const [st2CustomApiKey, setSt2CustomApiKey, setSt2CustomApiKeyImmediate] = useSessionState('st2_custom_api_key', '')
 
     // Load StackStorm connections and current session state
     const loadStackStormConnections = async () => {
@@ -44,15 +44,23 @@ function MainPage() {
             const connectionData = await backendClient.getStackStormConnections()
             if (connectionData) {
                 setSt2AvailableConnections(connectionData.connections || [])
-                setSt2CurrentConnection(connectionData.current || connectionData.default)
+
+                // Only update connection if not already set in session state
+                if (!st2CurrentConnection) {
+                    setSt2CurrentConnectionImmediate(connectionData.current || connectionData.default)
+                }
 
                 // Reset status when loading connections - don't assume connection works
                 setSt2ConnectionStatus('')
 
-                // If current connection is custom, populate the form with existing data
+                // If current connection is custom and we don't have URL set, populate from backend
                 if (connectionData.current === 'custom' && connectionData.custom_connection) {
-                    setSt2CustomUrl(connectionData.custom_connection.url || '')
-                    setSt2CustomApiKey(connectionData.custom_connection.api_key || '')
+                    if (!st2CustomUrl) {
+                        setSt2CustomUrlImmediate(connectionData.custom_connection.url || '')
+                    }
+                    if (!st2CustomApiKey) {
+                        setSt2CustomApiKeyImmediate(connectionData.custom_connection.api_key || '')
+                    }
                 }
             }
         } catch (error) {
@@ -75,7 +83,7 @@ function MainPage() {
 
         // For non-custom connections, update immediately
         if (connectionId !== 'custom') {
-            setSt2CurrentConnection(connectionId)
+            setSt2CurrentConnectionImmediate(connectionId)
             setSt2ConnectionStatus('loading')
 
             try {
@@ -89,7 +97,7 @@ function MainPage() {
             }
         } else {
             // For custom connections, just update the UI state - don't submit yet
-            setSt2CurrentConnection(connectionId)
+            setSt2CurrentConnectionImmediate(connectionId)
             setSt2ConnectionStatus('') // Reset status for custom until they set it
         }
     }
@@ -296,6 +304,14 @@ function MainPage() {
             }
         }
 
+        // Add validation to prevent arrays at the top level
+        if (Array.isArray(parsedContextData)) {
+            const errorMsg = `${queryType === 'orquesta' ? 'Context' : 'Data'} Error: Arrays are not supported at the top level. Please wrap your array in an object, e.g., {"items": [...]}`
+            setEvaluationImmediate(errorMsg)
+            setEvaluationStatus('error')
+            return
+        }
+
         let parsedResultData = {}
         if (queryType === 'orquesta' && resultData) {
             try {
@@ -306,17 +322,6 @@ function MainPage() {
                 setEvaluationStatus('error')
                 return
             }
-        }
-
-        const payload = {
-            expression: query,
-            data: queryType === 'orquesta'
-                ? {
-                    ...parsedContextData,
-                    __task_status: taskStatusOverride,
-                    __task_result: parsedResultData
-                }
-                : parsedContextData  // Send data as-is for YAQL/Jinja2
         }
 
         setIsLoading(true)
@@ -362,13 +367,6 @@ function MainPage() {
         }
     }
 
-    const handleMonacoKeyDown = (e, monaco) => {
-        if ((e.ctrlKey || e.metaKey) && e.keyCode === monaco.KeyCode.Enter) {
-            e.preventDefault()
-            evaluateExpression()
-        }
-    }
-
     const fetchStackStormResult = async () => {
         // Clear any previous alert
         setSt2Alert('')
@@ -402,8 +400,7 @@ function MainPage() {
                 // Format the data according to the current task result format
                 const formattedData = formatData(executionData, dataFormat)
                 setResultDataImmediate(formattedData)
-                setEvaluationImmediate(responseData.message)
-                setEvaluationStatus('success')
+                setSt2ConnectionStatus('success')
             }
         } catch (error) {
             const errorMessage = backendClient.formatNetworkError(error)
@@ -415,7 +412,7 @@ function MainPage() {
 
     return (
         <>
-            <div className="panes-container">
+            <div className={`panes-container ${queryType === 'orquesta' ? 'orquesta-mode' : 'compact-mode'}`}>
                 {/* Query Pane - Full Width at Top */}
                 <div className="pane wide-pane">
                     <div className="pane-header">
@@ -495,14 +492,7 @@ function MainPage() {
                         options={{
                             placeholder: `${queryType === "orquesta" ? "<% ctx() %>" : "Enter your query here..."}`
                         }}
-                    // onMount={(editor, monaco) => {
-                    //   // Handle Ctrl+Enter shortcut
-                    //   editor.onKeyDown((e) => handleMonacoKeyDown(e, monaco))
-                    // }}
                     />
-                    < div className="hint" >
-                        ctrl + enter to eval
-                    </div>
                 </div>
 
                 {/* Data Pane - Left Side */}
@@ -547,14 +537,7 @@ function MainPage() {
                             const newContextData = value || ''
                             setContextData(newContextData)
                         }}
-                    // onMount={(editor, monaco) => {
-                    //   // Handle Ctrl+Enter shortcut
-                    //   editor.onKeyDown((e) => handleMonacoKeyDown(e, monaco))
-                    // }}
                     />
-                    <div className="hint">
-                        avoid sensitive data - stored in session
-                    </div>
                 </div>
                 {/* Evaluation Pane - Right Side */}
                 <div className="pane">
@@ -654,14 +637,7 @@ function MainPage() {
                             const newResultData = value || ''
                             setResultData(newResultData)
                         }}
-                    // onMount={(editor, monaco) => {
-                    //   // Handle Ctrl+Enter shortcut
-                    //   editor.onKeyDown((e) => handleMonacoKeyDown(e, monaco))
-                    // }}
                     />
-                    <div className="hint">
-                        avoid sensitive data - stored in session
-                    </div>
                 </div>
                 {/* StackStorm Integration Panel */}
                 <div className={`pane pane-bottom ${queryType !== 'orquesta' ? 'hidden' : ''}`}>
