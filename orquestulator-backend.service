@@ -1,0 +1,39 @@
+[Unit]
+Description=Orquestulator Backend Server
+Documentation=https://github.com/gtg46/Orquestulator
+After=network.target
+Wants=network.target
+
+[Service]
+Type=exec
+User=orquestulator
+Group=orquestulator
+WorkingDirectory=/opt/orquestulator/backend
+ExecStart=/opt/orquestulator/backend/.venv/bin/python -m uvicorn app.main:app --host ${BACKEND_HOST} --port ${BACKEND_PORT}
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/orquestulator
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+# Environment
+Environment=PYTHONPATH=/opt/orquestulator/backend
+Environment=BACKEND_HOST=localhost
+Environment=BACKEND_PORT=8000
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=orquestulator-backend
+
+[Install]
+WantedBy=multi-user.target
