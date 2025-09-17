@@ -9,7 +9,7 @@ Type=exec
 User=orquestulator
 Group=orquestulator
 WorkingDirectory=/opt/orquestulator/backend
-ExecStart=/opt/orquestulator/backend/.venv/bin/python -m uvicorn app.main:app --host ${BACKEND_HOST:-localhost} --port ${BACKEND_PORT:-7618}
+ExecStart=/opt/orquestulator/backend/.venv/bin/python -m uvicorn app.main:app --host $BACKEND_HOST --port $BACKEND_PORT
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=always
 RestartSec=5
@@ -26,8 +26,10 @@ ProtectKernelModules=true
 ProtectControlGroups=true
 
 # Environment
-EnvironmentFile=-/opt/orquestulator/backend/.env
 Environment=PYTHONPATH=/opt/orquestulator/backend
+Environment=BACKEND_HOST=localhost
+Environment=BACKEND_PORT=7618
+EnvironmentFile=/opt/orquestulator/backend/.env
 
 # Logging
 StandardOutput=journal
