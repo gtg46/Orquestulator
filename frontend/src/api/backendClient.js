@@ -5,7 +5,7 @@
 
 class BackendClient {
   constructor() {
-    this.baseURL = import.meta.env.VITE_BACKEND_URL
+    this.baseURL = '/api'
     this.onSessionExpired = null
     this.sessionCheckInterval = null
     this.isCheckingSession = false
@@ -16,48 +16,6 @@ class BackendClient {
    */
   setSessionExpiredCallback(callback) {
     this.onSessionExpired = callback
-  }
-
-  /**
-   * Start periodic session validation
-   */
-  startSessionHeartbeat(intervalMs = 60000) { // Check every minute by default
-    if (this.sessionCheckInterval) {
-      clearInterval(this.sessionCheckInterval)
-    }
-
-    this.sessionCheckInterval = setInterval(async () => {
-      if (this.isCheckingSession) return // Prevent overlapping checks
-
-      this.isCheckingSession = true
-      try {
-        await this.checkAuthStatus()
-      } catch (error) {
-        // Session check failed - this will trigger the session expired callback
-        console.debug('Session heartbeat check failed:', error.message)
-      } finally {
-        this.isCheckingSession = false
-      }
-    }, intervalMs)
-  }
-
-  /**
-   * Stop periodic session validation
-   */
-  stopSessionHeartbeat() {
-    if (this.sessionCheckInterval) {
-      clearInterval(this.sessionCheckInterval)
-      this.sessionCheckInterval = null
-    }
-  }
-
-  /**
-   * Clear all session-related data (for session expiration)
-   */
-  clearSessionState() {
-    // This will be called when session expires
-    // Individual useSessionState hooks should handle their own cleanup
-    console.debug('Session state cleared due to expiration')
   }
 
   /**
@@ -97,23 +55,27 @@ class BackendClient {
    */
   async authenticate(passphrase = null) {
     const body = passphrase ? { passphrase } : {}
-    const response = await this.makeRequest('/api/session/auth', {
+    
+    const response = await fetch(`${this.baseURL}/session/auth`, {
       method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
       body: JSON.stringify(body)
     })
 
-    if (!response) return null
-
-    if (response.ok) {
-      return await response.json()
-    } else {
+    if (!response.ok) {
       const errorData = await response.json()
       throw new Error(errorData.detail || 'Authentication failed')
     }
+
+    return await response.json()
   }
 
   async checkAuthStatus() {
-    const response = await this.makeRequest('/api/session/status')
+  const response = await this.makeRequest('/session/status')
 
     if (!response) return null
 
@@ -126,7 +88,7 @@ class BackendClient {
 
   async saveSessionData(key, value) {
     try {
-      const response = await this.makeRequest('/api/session/data', {
+  const response = await this.makeRequest('/session/data', {
         method: 'POST',
         body: JSON.stringify({
           data: { [key]: value }
@@ -144,7 +106,7 @@ class BackendClient {
   }
 
   async getSessionData() {
-    const response = await this.makeRequest('/api/session/data')
+  const response = await this.makeRequest('/session/data')
 
     if (!response) return null
 
@@ -159,7 +121,7 @@ class BackendClient {
    * Expression Evaluation
    */
   async evaluateExpression(queryType, expression, data) {
-    const response = await this.makeRequest(`/api/evaluate/${queryType}`, {
+  const response = await this.makeRequest(`/evaluate/${queryType}`, {
       method: 'POST',
       body: JSON.stringify({
         expression,
@@ -187,7 +149,7 @@ class BackendClient {
    * @returns {Promise<Object>} ConnectionResponse with connections, default, current, and custom_connection
    */
   async getStackStormConnections() {
-    const response = await this.makeRequest('/api/stackstorm/connection')
+  const response = await this.makeRequest('/stackstorm/connection')
 
     if (!response) return null
 
@@ -221,7 +183,7 @@ class BackendClient {
       }
     }
 
-    const response = await this.makeRequest('/api/stackstorm/connection', {
+  const response = await this.makeRequest('/stackstorm/connection', {
       method: 'PUT',
       body: JSON.stringify(body)
     })
@@ -241,7 +203,7 @@ class BackendClient {
    * @returns {Promise<Object>} ConnectionTestResponse with success and message
    */
   async testStackStormConnection() {
-    const response = await this.makeRequest('/api/stackstorm/connection/test', {
+  const response = await this.makeRequest('/stackstorm/connection/test', {
       method: 'POST'
     })
 
@@ -260,7 +222,7 @@ class BackendClient {
    * @returns {Promise<Object>} ExecutionsListResponse with executions array
    */
   async getStackStormExecutions() {
-    const response = await this.makeRequest('/api/stackstorm/executions')
+  const response = await this.makeRequest('/stackstorm/executions')
 
     if (!response) return null
 
@@ -278,7 +240,7 @@ class BackendClient {
    * @returns {Promise<Object>} ExecutionResponse with execution_data and message
    */
   async getStackStormExecution(executionId) {
-    const response = await this.makeRequest(`/api/stackstorm/executions/${executionId}`)
+  const response = await this.makeRequest(`/stackstorm/executions/${executionId}`)
 
     if (!response) return null
 

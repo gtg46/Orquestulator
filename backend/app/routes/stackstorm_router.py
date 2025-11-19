@@ -195,7 +195,7 @@ async def test_connection(session_id: str = Depends(require_valid_session)):
 
         # Test the connection
         base_url = stackstorm_config["url"].rstrip("/")
-        test_url = f"{base_url}/v1/executions"
+        test_url = f"{base_url}/v1"
 
         headers = {"Content-Type": "application/json"}
         if stackstorm_config.get("api_key"):

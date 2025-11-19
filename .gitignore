@@ -38,3 +38,9 @@ logs/
 # Backup files
 *.bak
 *.backup
+
+# Profile files
+.*
+
+# Location for SSL certs
+certs/

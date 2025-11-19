@@ -5,7 +5,7 @@ After=network.target
 Wants=network.target
 
 [Service]
-Type=exec
+Type=simple
 User=orquestulator
 Group=orquestulator
 WorkingDirectory=/opt/orquestulator/backend

@@ -396,9 +396,12 @@ function MainPage() {
                     return
                 }
 
-                // Set the execution data to the task result field instead of context field
+                // Extract the result data from the execution for display
+                const resultData = executionData.result || {}
+                
+                // Set the result data to the task result field instead of context field
                 // Format the data according to the current task result format
-                const formattedData = formatData(executionData, dataFormat)
+                const formattedData = formatData(resultData, dataFormat)
                 setResultDataImmediate(formattedData)
                 setSt2ConnectionStatus('success')
             }

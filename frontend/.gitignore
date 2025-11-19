@@ -56,7 +56,3 @@ coverage/
 
 # Monaco Editor cache (if any)
 .monaco/
-
-# Prefer example files
-vite.config.js
-nginx.conf

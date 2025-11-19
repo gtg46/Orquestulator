@@ -5,8 +5,19 @@ from slowapi.errors import RateLimitExceeded
 from app.routes import evaluation_router
 from app.routes import stackstorm_router
 from app.routes import session_router
+from app.lib.config import config
 
-app = FastAPI(title="Orquestulator")
+# Conditionally enable/disable Swagger UI and API documentation
+docs_url = "/docs" if config.SWAGGER_UI else None
+redoc_url = "/redoc" if config.SWAGGER_UI else None
+openapi_url = "/openapi.json" if config.SWAGGER_UI else None
+
+app = FastAPI(
+    title="Orquestulator",
+    docs_url=docs_url,
+    redoc_url=redoc_url,
+    openapi_url=openapi_url
+)
 
 # Rate limiting setup
 limiter = Limiter(key_func=get_remote_address)

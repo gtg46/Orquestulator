@@ -37,6 +37,9 @@ class Config:
         # Rate Limiting
         self.AUTH_RATE_LIMIT = os.getenv("AUTH_RATE_LIMIT", "5/minute")
 
+        # API Documentation - Swagger UI provides interactive API documentation
+        self.SWAGGER_UI = os.getenv("SWAGGER_UI", "true").lower() == "true"
+
         # StackStorm Configuration
         self.STACKSTORM_CONNECTIONS_CONFIG = os.getenv(
             "STACKSTORM_CONNECTIONS_CONFIG", "./config/stackstorm-connections.json"

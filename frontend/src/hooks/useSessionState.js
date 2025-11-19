@@ -88,7 +88,7 @@ export const useSessionState = (key, defaultValue, options = {}) => {
     setValue(prev => {
       // Handle function updates like useState does
       const actualValue = typeof newValue === 'function'
-        ? newValue(prev)  // ✅ Use current value from setter
+        ? newValue(prev)
         : newValue
 
       // Only save to backend after initial load is complete
@@ -103,7 +103,7 @@ export const useSessionState = (key, defaultValue, options = {}) => {
 
       return actualValue
     })
-  }, [debouncedSave, immediateSave])  // ✅ Remove 'value' dependency
+  }, [debouncedSave, immediateSave])
 
   // Create an immediate setter function for convenience
   const setValueImmediate = useCallback((newValue) => {

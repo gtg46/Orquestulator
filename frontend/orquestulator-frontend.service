@@ -1,0 +1,28 @@
+[Unit]
+Description=Orquestulator Frontend Nginx
+After=network.target
+
+[Service]
+Type=simple
+User=orquestulator
+Group=orquestulator
+ExecStart=/usr/sbin/nginx -c /opt/orquestulator/frontend/nginx.conf
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+
+# Security hardening (optional)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/orquestulator
+ProtectKernelTunables=true
+ProtectKernelModules=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=orquestulator-frontend
+
+[Install]
+WantedBy=multi-user.target
