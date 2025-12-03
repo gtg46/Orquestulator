@@ -1,0 +1,11 @@
+:80 {
+	# Proxy API requests to backend
+	handle /api/* {
+		reverse_proxy backend:7618
+	}
+
+	# Serve frontend for everything else
+	handle {
+		reverse_proxy frontend:80
+	}
+}

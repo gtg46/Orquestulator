@@ -3,23 +3,37 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    ports:
-      - "7618:7618"
     environment:
-      - PYTHONPATH=/app
+      - PYTHONPATH=/orquestulator
+    volumes:
+      - ./backend/config:/orquestulator/config:ro
     networks:
       - orquestulator-network
+    expose:
+      - "7618"
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    ports:
-      - "80:80"
-    depends_on:
-      - backend
     networks:
       - orquestulator-network
+    expose:
+      - "80"
+    depends_on:
+      - backend
+
+  proxy:
+    image: caddy:2-alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    networks:
+      - orquestulator-network
+    depends_on:
+      - frontend
+      - backend
 
 networks:
   orquestulator-network:
